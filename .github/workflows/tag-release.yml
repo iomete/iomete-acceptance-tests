@@ -1,0 +1,32 @@
+name: Tag release
+
+# Each IOMETE release opens a release/<version> pull request here. Merging it tags the merge
+# commit with that version, so customers can check out the tests matching their install.
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tag the merge commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          version="${HEAD_REF#release/}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$HEAD_REF does not name a release version"
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$version" -f sha="$SHA"
+          echo "Tagged $SHA as $version"
