@@ -1,0 +1,25 @@
+name: PR Slack announcer
+
+# Announces this repo's PRs in #pr-reviews and reminds when a review is overdue.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed, review_requested, review_request_removed, assigned, unassigned, edited]
+  pull_request_review:
+    types: [submitted, dismissed]
+  schedule:
+    # 06:00 UTC on weekdays: the daily reminder sweep.
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  announce:
+    uses: iomete/infra/.github/workflows/pr-slack-announcer.yml@main
+    with:
+      # Go-live: PRs opened earlier stay out of Slack.
+      opened-after: '2026-10-23'
+    secrets:
+      SLACK_NOTIFY_BOT_TOKEN: ${{ secrets.SLACK_NOTIFY_BOT_TOKEN }}
