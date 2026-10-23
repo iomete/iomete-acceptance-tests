@@ -4,8 +4,8 @@ Karate API acceptance tests that customers run against their own IOMETE install.
 
 ## How this repository works
 
-- It is a published copy. Each IOMETE release opens a pull request here that replaces the tests and docs with that release's version, so changes made only here are overwritten.
-- Fix things in IOMETE's own repository instead. A change here is only a proposal that we port over (see `CONTRIBUTING.md`).
+- The tests are a published copy. Each IOMETE release opens a pull request here that replaces them with that release's version, so changes made to them only here are overwritten. Fix them in IOMETE's own repository instead (see `CONTRIBUTING.md`).
+- `README.md` and the files that describe this repository (`CONTRIBUTING.md`, this file, `LICENSE`, `NOTICE`, the CI) are maintained here, and releases leave them alone. Keep the README in step with the commands and settings the tests use.
 - Releases are tagged with the IOMETE version. A customer uses the tag that matches their install.
 
 ## Boundaries
