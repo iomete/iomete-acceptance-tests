@@ -104,7 +104,7 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 
 ## What the suite creates
 
-- **A domain for each run**, named `karate-<run id>-...`. Everything the run starts lives in it, and `make cleanup` deletes it. On IOMETE versions before 4.1.0, which cannot delete a domain, the suite uses one domain named `karate` and keeps it. To use a domain you already have instead, set `IOMETE_DOMAIN`. The suite never deletes that one.
+- **A domain for each run**, named `karate-<run id>-...`. Everything the run starts lives in it, and `make cleanup` deletes it. On IOMETE versions before 4.0.2, which cannot delete a domain, the suite uses one domain named `karate` and keeps it. To use a domain you already have instead, set `IOMETE_DOMAIN`. The suite never deletes that one.
 - **Six small node types** named `karate-*`. They stay, so the next run can reuse them.
 - **Users, groups, catalogs, databases, policies and secrets.** Their names start with `karate-` or `karate_` and carry the run id. Each test removes what it creates, and `make cleanup` removes the rest.
 
