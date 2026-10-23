@@ -10,7 +10,7 @@ You need:
 
 - **An IOMETE admin account** (username and password), or an admin access token.
 - **Network access** from where you run the suite to your IOMETE console address.
-- **Room for a few small computes.** The suite runs up to four at a time, each with a 3 GB driver and a 2 GB executor.
+- **Room for several small computes.** A run keeps two computes warm for its whole length and starts up to four more at a time for single tests, each with a 3 GB driver and a 2 GB executor, plus short Spark jobs and a Jupyter container. The suite registers its own small node types for them (`karate-*`).
 - **Docker**, or **Java 21** and `make` to run from source.
 
 ## Quick start with Docker
@@ -18,7 +18,8 @@ You need:
 Use the image that matches your IOMETE version:
 
 ```bash
-docker run --rm \
+mkdir -p reports
+docker run --rm -u "$(id -u):$(id -g)" \
   -e IOMETE_BASE_URL=https://iomete.example.com \
   -e IOMETE_ADMIN_PASSWORD=your-admin-password \
   -v "$PWD/reports:/suite/target/karate-reports" \
@@ -87,12 +88,12 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 
 | Test | What it checks | Settings |
 |---|---|---|
-| LDAP sync | Users and groups sync in from an LDAP directory and are removed when the filter stops matching | `IOMETE_LDAP_URL`, `IOMETE_LDAP_BIND_PASSWORD` |
+| LDAP sync | Users and groups sync in from an LDAP directory and are removed when the filter stops matching | `IOMETE_LDAP_URL`, `IOMETE_LDAP_BIND_PASSWORD`, and `IOMETE_LDAP_BASE_DN` (default `dc=iomete,dc=com`); optionally `IOMETE_LDAP_BIND_DN`, `IOMETE_LDAP_USERS_DN`, `IOMETE_LDAP_GROUPS_DN` |
 | GitLab | The SQL editor opens files and branches from a GitLab project | `IOMETE_GIT_REPO_URL`, `IOMETE_GIT_TOKEN` |
 | GitHub | A GitHub repository can be added and its files listed | `IOMETE_GITHUB_REPO_URL`, `IOMETE_GITHUB_TOKEN` |
 | Vault | A Vault secret store connects and its keys are listed | `IOMETE_VAULT_ADDRESS`, `IOMETE_VAULT_TOKEN`, `IOMETE_VAULT_SECRET_PATH`, `IOMETE_VAULT_SECRET_KEY` |
-| Email notifications | A failed job sends an email | `IOMETE_MAIL_*` |
-| Webhook notifications | A failed job calls a webhook | `IOMETE_WEBHOOK_*` |
+| Email notifications | A failed job sends an email, read back from a Mailpit mailbox | `IOMETE_MAIL_*`. `IOMETE_MAIL_SET_INTEGRATION=true` sets up the platform's email integration if there is none, and leaves it |
+| Webhook notifications | A failed job calls a webhook | `IOMETE_WEBHOOK_*`. `IOMETE_WEBHOOK_SET_FLAG=true` turns webhook notifications on for the whole platform, and leaves them on |
 | Storage check | IOMETE can list, write, read and delete in an S3 bucket | `IOMETE_STORAGE_*` |
 | Platform-wide changes | Overriding a system setting, a marketplace app, a Docker registry and a Model Gateway connection. The Model Gateway test leaves a `karate-model` provider model behind, since it cannot be deleted | `IOMETE_ALLOW_PLATFORM_CHANGES=true` |
 
@@ -111,7 +112,7 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 
 `make cleanup` ends with a `WARNING:` line for each thing it leaves behind on purpose.
 
-If a run was cancelled, `make cleanup` still removes what it left, as long as you run it from the same folder before starting another run. A Docker run cleans up when it is stopped; if the container was killed outright, run the image again with `-e IOMETE_RUN_ID=<the run id it printed>` and the argument `cleanup`.
+If a run was cancelled, `make cleanup` still removes what it left, as long as you run it from the same folder before starting another run. A Docker run cleans up when you press Ctrl-C or stop it. Give it time: `docker stop -t 300 <container>`, since plain `docker stop` kills it after 10 seconds, mid-cleanup. If the container was killed, run the image again with `-e IOMETE_RUN_ID=<the run id it printed>` and the argument `cleanup`.
 
 ## Settings
 
@@ -143,12 +144,12 @@ $env:IOMETE_ADMIN_PASSWORD = "your-admin-password"
 
 | Instead of | Run |
 |---|---|
-| `make check` | `.\mvnw.cmd test "-Dkarate.options=src/test/java/iomete/helpers/probe.feature"` |
+| `make check` | `.\mvnw.cmd test -Diomete.check=true "-Dkarate.options=--output target/karate-probe src/test/java/iomete/helpers/probe.feature"` |
 | `make test-one FEATURE=<file>` | `.\mvnw.cmd test "-Dkarate.options=<file>"` |
 | `make cleanup` | the three commands below, in this order |
-| | `.\mvnw.cmd test "-Dkarate.options=src/test/java/iomete/helpers/cleanup-run-fixtures.feature"` |
-| | `.\mvnw.cmd test "-Dkarate.options=src/test/java/iomete/helpers/compute/delete-run-computes.feature"` |
-| | `.\mvnw.cmd test -Diomete.teardown=true "-Dkarate.options=src/test/java/iomete/helpers/cleanup-run-domain.feature"` |
+| | `.\mvnw.cmd test "-Dkarate.options=--output target/karate-teardown src/test/java/iomete/helpers/cleanup-run-fixtures.feature"` |
+| | `.\mvnw.cmd test "-Dkarate.options=--output target/karate-teardown src/test/java/iomete/helpers/compute/delete-run-computes.feature"` |
+| | `.\mvnw.cmd test -Diomete.teardown=true "-Dkarate.options=--output target/karate-teardown src/test/java/iomete/helpers/cleanup-run-domain.feature"` |
 
 ## Troubleshooting
 
