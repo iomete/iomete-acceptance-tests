@@ -1,0 +1,19 @@
+# Maven
+target/
+
+# Karate reports
+karate-reports*/
+reports/
+
+# credentials, never commit
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs and crash files
+*.log
+hs_err_pid*
+replay_pid*

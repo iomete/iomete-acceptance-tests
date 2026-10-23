@@ -1,0 +1,39 @@
+name: Build
+
+# Compiles the suite and checks nothing internal leaks into what customers see. It never runs
+# the tests: those need a real IOMETE install.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check for internal references
+        run: |
+          pattern='iometeinternal|dev\.iomete\.cloud|e2e-tests\.|atlassian\.net|linear\.app|\b(ENG|ENG2|LKH|PLA|INF)-[0-9]+\b'
+          if git grep -n -I -P "$pattern" -- . ':!.github/workflows/build.yml'; then
+            echo "::error::Internal references found above; this repository is customer-facing."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        if: ${{ hashFiles('pom.xml') != '' }}
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # No suite yet until the first release lands it
+      - name: Compile the suite
+        if: ${{ hashFiles('pom.xml') != '' }}
+        run: ./mvnw -B -q test-compile
