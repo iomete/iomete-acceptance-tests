@@ -94,6 +94,7 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 | Email notifications | A failed job sends an email | `IOMETE_MAIL_*` |
 | Webhook notifications | A failed job calls a webhook | `IOMETE_WEBHOOK_*` |
 | Storage check | IOMETE can list, write, read and delete in an S3 bucket | `IOMETE_STORAGE_*` |
+| Platform-wide changes | Overriding a system setting, a marketplace app, a Docker registry and a Model Gateway connection. The Model Gateway test leaves a `karate-model` provider model behind, since it cannot be deleted | `IOMETE_ALLOW_PLATFORM_CHANGES=true` |
 
 > [!WARNING]
 > The LDAP test replaces every user and group imported from LDAP on the install, and removes them when it finishes. Only turn it on for a test install. It never writes to the directory.
@@ -125,6 +126,7 @@ All settings go in `.env`, or `-e` for Docker. Only the first two are required.
 | `IOMETE_DOMAIN` | An existing domain to run in, instead of one created for the run |
 | `IOMETE_IMAGE_REGISTRY` | Registry and path to pull Spark images from, if you use a mirror, e.g. `registry.example.com/iomete` |
 | `IOMETE_SPARK_IMAGE` | Spark image tag to test. Default `3.5.7-latest` |
+| `IOMETE_ALLOW_PLATFORM_CHANGES` | `true` also runs the tests that change platform-wide state. Default off |
 | `IOMETE_DATA_PLANE_STRATEGY` | With several data planes: `local` (default), `external` or `mixed` |
 
 If a value contains `#`, `$` or quotes, export it from your shell instead and delete its line from `.env`.
