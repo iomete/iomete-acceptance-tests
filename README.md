@@ -25,7 +25,7 @@ docker run --rm \
   iomete.azurecr.io/iomete/api-testing-suite:<your IOMETE version>
 ```
 
-It checks that it can reach your install and log in, runs all the tests, then removes everything it created. The report lands in `./reports`. A full run takes about 30 to 40 minutes, plus a few minutes on the first start while it downloads its dependencies.
+It checks that it can reach your install and log in, runs all the tests, then removes everything it created, and starts within seconds. The report lands in `./reports`. It prints a run id first, which you need only to clean up after a killed run (see [What the suite creates](#what-the-suite-creates)). A full run takes about 30 to 40 minutes.
 
 ## Quick start from source
 
@@ -77,7 +77,7 @@ make test-one FEATURE=src/test/java/iomete/tests/sql/query-ddl.feature:46   # on
 make test-one TAGS="@spark3"                                                # by tag
 ```
 
-Tests are grouped by area under `src/test/java/iomete/tests/`: `sql`, `compute`, `job`, `data-security`, `identity`, `catalog` and others. With Docker, add `./mvnw -B test -Dkarate.options=<file>` at the end of `docker run`; it runs that part and does not clean up.
+Tests are grouped by area under `src/test/java/iomete/tests/`: `sql`, `compute`, `job`, `data-security`, `identity`, `catalog` and others. With Docker, put the same choice after the image name, as a classpath path or a tag: `classpath:iomete/tests/sql` or `--tags @spark3`. It still cleans up afterwards.
 
 Run `make clean` after adding, moving or renaming a test file.
 
@@ -111,7 +111,7 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 
 `make cleanup` ends with a `WARNING:` line for each thing it leaves behind on purpose.
 
-If a run was cancelled, `make cleanup` still removes what it left, as long as you run it from the same folder before starting another run.
+If a run was cancelled, `make cleanup` still removes what it left, as long as you run it from the same folder before starting another run. A Docker run cleans up when it is stopped; if the container was killed outright, run the image again with `-e IOMETE_RUN_ID=<the run id it printed>` and the argument `cleanup`.
 
 ## Settings
 
