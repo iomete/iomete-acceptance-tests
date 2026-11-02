@@ -1,0 +1,54 @@
+name: Tag release
+
+# Each IOMETE release opens a release/<version> pull request here. Merging it publishes a GitHub
+# release of that version on the merge commit, so customers can check out the matching tests.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  # A misnamed release branch is caught while the pull request is open, not after it merges untagged
+  check-name:
+    if: github.event.action != 'closed' && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the branch names a release version
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if [[ ! "${HEAD_REF#release/}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$HEAD_REF does not name a release version like release/4.0.2"
+            exit 1
+          fi
+
+  release:
+    if: >-
+      github.event.action == 'closed' && github.event.pull_request.merged
+      && startsWith(github.event.pull_request.head.ref, 'release/')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish the release on the merge commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          version="${HEAD_REF#release/}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$HEAD_REF does not name a release version"
+            exit 1
+          fi
+          if gh release view "$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $version already exists; leaving it as it is"
+            exit 0
+          fi
+          gh release create "$version" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "IOMETE $version" --notes "The acceptance tests for IOMETE $version."
