@@ -82,6 +82,20 @@ Tests are grouped by area under `src/test/java/iomete/tests/`: `sql`, `compute`,
 
 Run `make clean` after adding, moving or renaming a test file.
 
+## Your own tests
+
+Put your own tests in the `custom-tests` folder, as Karate `.feature` files. Each IOMETE release replaces the IOMETE tests under `src`, but never touches `custom-tests`, so keep your tests there and not under `src`.
+
+They run with the IOMETE tests in `make test`, and on their own with:
+
+```bash
+make test-one FEATURE=custom-tests
+```
+
+With Docker, mount the folder into the container: add `-v "$PWD/custom-tests:/suite/custom-tests"` to the `docker run` command.
+
+Each feature needs a `@lock` tag on its first line, which decides what it may run next to. Use `@lock=api` for a test that only calls the API. `custom-tests/example.feature` shows the shape. A test can use the same settings and helpers as the IOMETE tests, for example `baseUrl` and `runId`, and `call read('classpath:iomete/helpers/...')`. Follow the test-writing rules in [CONTRIBUTING.md](CONTRIBUTING.md) so your test cleans up after itself.
+
 ## Optional tests
 
 These tests skip unless you give them what they need in `.env` (or with `-e` for Docker). `.env.example` lists every setting.

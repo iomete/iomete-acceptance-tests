@@ -7,6 +7,8 @@ The tests are published from IOMETE's own repository with each IOMETE release, s
 - **Report a problem or ask for a test** by opening an issue. Include your IOMETE version, the test that failed and, if you can, the report folder.
 - **Pull requests are welcome** as a way to show a fix. We apply the change in our repository, and it reaches this one with the next release. We then close your pull request with a link to the release.
 
+To keep tests of your own next to ours, put them in `custom-tests` (see the README). Releases leave that folder alone.
+
 When you write a test:
 
 - Cover the main flow of a feature end to end, not every edge case.
