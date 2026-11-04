@@ -2,7 +2,7 @@
 
 Thanks for helping improve the IOMETE acceptance tests.
 
-This repository is published from IOMETE's own repository with each IOMETE release, so a release replaces whatever changed here in between. Because of that:
+The tests are published from IOMETE's own repository with each IOMETE release, so a release replaces whatever changed in them here in between. The README and the other guides are maintained here directly. Because of that:
 
 - **Report a problem or ask for a test** by opening an issue. Include your IOMETE version, the test that failed and, if you can, the report folder.
 - **Pull requests are welcome** as a way to show a fix. We apply the change in our repository, and it reaches this one with the next release. We then close your pull request with a link to the release.
