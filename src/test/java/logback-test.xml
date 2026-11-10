@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Karate prints each HTTP request/response under the "karate.http" logger.
+         DEBUG shows the clean "1 > GET ..." / "1 < 200 ..." dumps; raise to INFO
+         to silence them. "karate.runtime" carries the framework's own messages. -->
+    <logger name="karate.http" level="INFO"/>
+    <logger name="karate.runtime" level="INFO"/>
+
+    <!-- "karate.scenario" carries a feature's own print / karate.log output, and
+         "karate.progress" the scenario start/outcome lines ApiTest writes. Both
+         inherit the root WARN level otherwise, and would never be printed. -->
+    <logger name="karate.scenario" level="INFO"/>
+    <logger name="karate.progress" level="INFO"/>
+
+    <!-- Apache HttpClient wire logging is extremely noisy (every header/byte).
+         Keep it quiet so only Karate's own request/response dump shows. -->
+    <logger name="org.apache.hc" level="WARN"/>
+
+    <!-- The JDBC drivers log the expected bad-token rejection as an error with a stack trace.
+         JdbcClient hands every failure to the scenario, so their own logging adds nothing. -->
+    <logger name="org.apache.kyuubi" level="OFF"/>
+
+    <!-- The Spark Connect client warns about features an older server lacks and logs the
+         expected bad-token rejection. SparkConnectClient hands every failure to the scenario. -->
+    <logger name="org.apache.spark" level="OFF"/>
+
+    <root level="WARN">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
