@@ -4,8 +4,7 @@ Feature: SQL schema parity — access to a catalog and to a domain
   A catalog not granted to the domain is refused with 403 on every V2 domain route, and stays
   open on the admin route, since the admin catalog list shows every catalog. A domain the caller
   has no access to is refused on V2 the way V1 refuses it, not answered with an empty list;
-  membership of a real non-member user is covered by
-  iom-sql's tests.
+  membership of a real non-member user is covered by iom-sql's tests.
 
   Skips when ARROW_FLIGHT_FOR_DB_EXPLORER is off: every V2 schema endpoint answers 409 then.
 

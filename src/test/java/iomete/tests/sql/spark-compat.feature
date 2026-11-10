@@ -100,7 +100,7 @@ Feature: SQL — Spark version backward compatibility (V2 API)
     Then status 200
 
   # ==========================================================================
-  # V2 query on old compute (no Arrow Flight) — proper error message
+  # V2 query on old compute (no Arrow Flight), proper error message
   # TODO will adjust response.errorMessage after the task done
   # ==========================================================================
 

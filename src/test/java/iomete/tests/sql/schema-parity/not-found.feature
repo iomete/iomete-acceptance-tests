@@ -3,8 +3,9 @@ Feature: SQL schema parity — a missing table, namespace or catalog answers an 
 
   The status a client sees for a missing table, namespace or catalog, on V1 and V2. V2 answers
   404 for all three. V1 answers 404 for a missing table and 500 for a missing namespace or
-  catalog, because it wraps every listing error: an intended difference, asserted on both sides. The same checks on the other V2 routes (admin, with metadata, the
-  forwarded V1 routes) run the same code and are left to iom-sql's tests.
+  catalog, because it wraps every listing error: an intended difference, asserted on both sides.
+  The same checks on the other V2 routes (admin, with metadata, the forwarded V1 routes) run the
+  same code and are left to iom-sql's tests.
 
   Skips when ARROW_FLIGHT_FOR_DB_EXPLORER is off: every V2 schema endpoint answers 409 then.
 
