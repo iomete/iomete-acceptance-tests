@@ -107,8 +107,8 @@ Feature: SQL schema parity — column types, comments, partitions and views matc
     * if (!schemaServerFixed) karate.abort()
 
     # ===== Setup: a non-Iceberg table of this scenario's own =====
-    # V2 used to answer `string` for char(n) and varchar(n) (LKH-1103), and to list only a few
-    # DESCRIBE rows for a table that is not Iceberg (LKH-1127)
+    # V2 used to answer `string` for char(n) and varchar(n), and to list only a few DESCRIBE rows
+    # for a table that is not Iceberg
     * def db = 'karate_parity_chars_' + runId
     * def full = catalogName + '.' + db
     * configure afterScenario = function(){ runQuery('DROP TABLE IF EXISTS ' + full + '.chars'); runQuery('DROP DATABASE IF EXISTS ' + full) }

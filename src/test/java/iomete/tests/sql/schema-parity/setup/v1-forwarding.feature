@@ -2,7 +2,7 @@
 Feature: Whether V1's domain and admin schema routes answer from V2 on this target (helper)
   Usage: karate.callSingle('classpath:iomete/tests/sql/schema-parity/setup/v1-forwarding.feature').forwarding
 
-  V1 forwards to V2 while arrowFlightForDbExplorer is on and, from LKH-1156, the
+  V1 forwards to V2 while arrowFlightForDbExplorer is on and, on newer platforms, the
   schemaV1ForwardToV2 rollout flag is on too (off by default). On a platform without that flag
   (404) forwarding follows arrowFlightForDbExplorer alone. Where platform-wide changes are allowed
   the flag is turned on, so the forwarding path stays covered, and left on like the other rollout
