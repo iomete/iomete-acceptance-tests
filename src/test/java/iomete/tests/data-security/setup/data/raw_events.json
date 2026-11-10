@@ -1,0 +1,5 @@
+[
+  { "id": 1, "event": "login" },
+  { "id": 2, "event": "logout" },
+  { "id": 3, "event": "purchase" }
+]

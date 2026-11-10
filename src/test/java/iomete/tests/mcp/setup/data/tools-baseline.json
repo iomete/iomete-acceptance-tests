@@ -1,0 +1,430 @@
+[
+  {
+    "name": "cancel_query",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed_cancellation_hash": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "query_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "describe_table",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "table": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog",
+        "namespace",
+        "table"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "execute_column_profile",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed_profile_plan_hash": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "profile_plan": {
+          "type": "object"
+        },
+        "resume_query_ids": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "profile_plan"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "explain_query",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "compute_cluster": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "sql": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sql"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_query_result",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "limit": {
+          "default": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "query_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_query_status",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "type": "string"
+        },
+        "query_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_catalogs",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_compute_clusters",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_domains",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_namespaces",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "force_refresh": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "catalog"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_tables",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "force_refresh": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog",
+        "namespace"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "plan_column_profile",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "compute_cluster": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sample_limit": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "table": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog",
+        "namespace",
+        "table",
+        "columns"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "run_query",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "compute_cluster": {
+          "type": "string"
+        },
+        "confirmed_plan_hash": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "inline_row_limit": {
+          "default": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "sql": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sql"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "sample_table",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "compute_cluster": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "row_limit": {
+          "default": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "table": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog",
+        "namespace",
+        "table"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_tables",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "limit": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "namespace": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "query": {
+          "maxLength": 1024,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "server_info",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "whoami",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  }
+]

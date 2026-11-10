@@ -1,0 +1,8 @@
+[
+  { "id": 1, "full_name": "alice", "email": "alice@acme.io",   "phone": "555-0101", "ssn": "111-11-1111", "country": "US", "region": "AMER", "tier": "gold" },
+  { "id": 2, "full_name": "bob",   "email": "bob@acme.io",     "phone": "555-0102", "ssn": "222-22-2222", "country": "DE", "region": "EMEA", "tier": "silver" },
+  { "id": 3, "full_name": "carol", "email": "carol@acme.io",   "phone": "555-0103", "ssn": "333-33-3333", "country": "GB", "region": "EMEA", "tier": "gold" },
+  { "id": 4, "full_name": "dave",  "email": "dave@acme.io",     "phone": "555-0104", "ssn": "444-44-4444", "country": "JP", "region": "APAC", "tier": "bronze" },
+  { "id": 5, "full_name": "erin",  "email": "erin@acme.io",     "phone": "555-0105", "ssn": "555-55-5555", "country": "US", "region": "AMER", "tier": "silver" },
+  { "id": 6, "full_name": "frank", "email": "frank@acme.io",   "phone": "555-0106", "ssn": "666-66-6666", "country": "SG", "region": "APAC", "tier": "gold" }
+]
