@@ -1,5 +1,5 @@
 @ignore
-Feature: Shared context for the V1 vs V2 schema parity features (LKH-1077)
+Feature: Shared context for the V1 vs V2 schema parity features
 
   The V1 baseline is the deprecated `api/v1/schema/...` routes: they always run iom-cluster's
   native code. The domain and admin V1 routes forward to V2 while ARROW_FLIGHT_FOR_DB_EXPLORER
@@ -40,7 +40,7 @@ Feature: Shared context for the V1 vs V2 schema parity features (LKH-1077)
     * configure retry = { count: 10, interval: 3000 }
     # The run's database is new: list the catalog's namespaces first. That refreshes the server's
     # namespace list on every server, while an older one doesn't refresh it on a table lookup
-    # (LKH-1137) and would answer 404 for the table until its cache expires
+    # and would answer 404 for the table until its cache expires
     Given url baseUrl
     And path v2, 'catalogs', catalogName, 'namespaces'
     And params fresh

@@ -7,8 +7,8 @@ Feature: Model Gateway connections and provider models, the admin API over the g
   the real platform can prove is that a connection created over a real provider key resolves that
   secret, and lists and reads back with its models and never the key's value. The admin gate,
   syntax rules, the validation order and the registry's own uniqueness handling are covered by
-  iom-ai-services' tests and stay out of here, except the two azure refusals below, which AI-471
-  asks to see on the real platform.
+  iom-ai-services' tests and stay out of here, except the two azure refusals below, which are
+  worth seeing on the real platform.
 
   A `gcp` connection can also address one self-deployed Vertex endpoint: its provider config then
   carries an `endpoint_id` and the endpoint's `dedicated_host`. Registering one never contacts

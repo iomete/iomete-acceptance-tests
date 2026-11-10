@@ -2,9 +2,9 @@
 Feature: SQL schema parity — access to a catalog and to a domain
 
   A catalog not granted to the domain is refused with 403 on every V2 domain route, and stays
-  open on the admin route, since the admin catalog list shows every catalog (LKH-1090,
-  LKH-1078). A domain the caller has no access to is refused on V2 the way V1 refuses it, not
-  answered with an empty list (LKH-1089); membership of a real non-member user is covered by
+  open on the admin route, since the admin catalog list shows every catalog. A domain the caller
+  has no access to is refused on V2 the way V1 refuses it, not answered with an empty list;
+  membership of a real non-member user is covered by
   iom-sql's tests.
 
   Skips when ARROW_FLIGHT_FOR_DB_EXPLORER is off: every V2 schema endpoint answers 409 then.
@@ -97,7 +97,7 @@ Feature: SQL schema parity — access to a catalog and to a domain
     Then status 200
 
   Scenario: a domain the caller has no access to is refused on V2, not listed as empty
-    # V2 answered 200 [] here before 4.0.2 (LKH-1089)
+    # V2 answered 200 [] here before 4.0.2
     * if (!platformAtLeast('4.0.2')) karate.log('platform ' + platformVersion + ' predates the V2 schema fixes these checks compare, skipping')
     * if (!platformAtLeast('4.0.2')) karate.abort()
     # a domain that does not exist: no caller has access to it. V1's domain route forwards to V2

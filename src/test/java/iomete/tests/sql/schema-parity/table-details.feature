@@ -34,7 +34,7 @@ Feature: SQL schema parity — the table details match where they already do
     Then status 200
     * def v1Table = response
     # the table is seeded by this run; V2 reads through the schema server's cache (V1 reads
-    # live, LKH-1092), so ask it to look again and give it a moment to see the new table
+    # live), so ask it to look again and give it a moment to see the new table
     * configure retry = { count: 10, interval: 3000 }
 
     # V2: describe employees in the seeded namespace

@@ -12,7 +12,7 @@ Feature: SQL schema parity — V1 and V2 list the same namespaces and tables
   route customers call (forwarded to V2) without asking for a refresh, since V1 never cached.
   Last, a database created after V2 listed the namespaces must be listed by V2 as soon as it is
   asked for a refresh: `forceRefresh` used to clear only the tables cache, so V2 kept its
-  namespace list for up to 10 minutes and missed the new database's tables (LKH-1137).
+  namespace list for up to 10 minutes and missed the new database's tables.
 
   Skips when ARROW_FLIGHT_FOR_DB_EXPLORER is off: every V2 schema endpoint answers 409 then.
 

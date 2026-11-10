@@ -60,7 +60,7 @@ Feature: Identity, a bundle's owner grants and revokes a member's access, and a 
 
     # the owner finds it in their own list. Leaving scope out is the point: it is optional, and every
     # other call to this endpoint names it, so nothing else exercises the server's default. Before
-    # 4.0.2 that answers 500 (PLA-1870), so older targets name it too.
+    # 4.0.2 that answers 500, so older targets name it too.
     * configure headers = ownerHeaders
     * def scopeHasDefault = platformAtLeast('4.0.2')
     Given path 'api/v1/bundles'
