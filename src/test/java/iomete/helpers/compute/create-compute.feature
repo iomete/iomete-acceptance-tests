@@ -140,29 +140,45 @@ Feature: Create (or reuse) a compute and wait until it can really execute SQL.
 
     # what the platform reports about the compute, logged right before either wait gives up
     # a diagnostics error must never replace the compute's own failure
-    * def logDiagnostics = function(why) { try { karate.call('classpath:iomete/helpers/compute/log-compute-diagnostics.feature', { domain: domain, computeId: computeId, computeName: computeName, why: why }) } catch (e) { karate.log('compute diagnostics failed: ' + redact(e.message)) } }
+    # returns the failure, led by a plain-words resource shortage when the diagnostics found one
+    # since: only events and log lines from then on are read as a shortage
+    # refusalsLead: only a quota refusal leads, anything else follows the failure as a hint
+    * def logDiagnostics = function(why, since, refusalsLead) { try { var d = karate.call('classpath:iomete/helpers/compute/log-compute-diagnostics.feature', { domain: domain, computeId: computeId, computeName: computeName, why: why, since: since }); var s = d.shortage; if (!s) return why; return s.refused || !refusalsLead ? redact(s.text) + '\nDetails: ' + why : why + '\nPossible cause: ' + redact(s.text) } catch (e) { karate.log('compute diagnostics failed: ' + redact(e.message)); return why } }
 
     # wait until the driver is ACTIVE and its executor runs (cold start can take a few minutes):
     # the driver reports ACTIVE before it starts the executor, which the warm-up would pay for.
     # A JS loop rather than `retry until`, so the diagnostics can still run when it times out.
+    # Every 30s it also checks for quota refusals and gives up early once they have lasted
+    # 2 minutes, since a full quota rarely frees itself; the grace covers a run finishing nearby.
     * def driverDeadlineMs = 10 * 60 * 1000
+    # events and logs from before this start (a reused compute's earlier runs) never count as a shortage
+    * def computeStartMs = java.lang.System.currentTimeMillis()
     * def waitUntilDriverActive =
       """
       function() {
         var deadline = java.lang.System.currentTimeMillis() + driverDeadlineMs;
         var status = null;
-        while (java.lang.System.currentTimeMillis() < deadline) {
+        for (var i = 1; java.lang.System.currentTimeMillis() < deadline; i++) {
           var read = karate.call('classpath:iomete/helpers/compute/get-compute.feature', { domain: domain, computeId: computeId });
           // a status without executorsState only waits for the driver
           var executors = read.compute ? read.compute.executorsState : null;
           var running = executors ? (executors.RUNNING || 0) : 0;
           status = read.compute ? read.compute.driverStatus + ', ' + running + ' executor(s) running' : 'HTTP ' + read.status;
           if (read.compute && read.compute.driverStatus == 'ACTIVE' && (singleNode || !executors || running > 0)) return true;
+          if (read.compute && i % 3 == 0) {
+            // a failed check only skips this round, it never replaces the compute's own failure
+            try {
+              var check = karate.call('classpath:iomete/helpers/compute/check-resource-shortage.feature', { domain: domain, computeId: computeId, computeName: computeName, namespace: read.compute.namespace, since: computeStartMs });
+              if (check.shortage && check.shortage.refused) karate.log('compute ' + computeName + ' is waiting on the namespace quota: ' + redact(check.shortage.text));
+              if (check.shortage && check.shortage.giveUp) return logDiagnostics('compute ' + computeName + ': gave up after ' + ((java.lang.System.currentTimeMillis() - check.shortage.firstRefusalMs) / 60000 | 0) + ' min of quota refusals, last status ' + status, computeStartMs);
+            } catch (e) {
+              karate.log('quota check failed: ' + redact((e.message + '').split('\n')[0]));
+            }
+          }
           java.lang.Thread.sleep(10000);
         }
         var failure = 'compute ' + computeName + ': not up after ' + (driverDeadlineMs / 60000) + ' min, last status ' + status;
-        logDiagnostics(failure);
-        return failure;
+        return logDiagnostics(failure, computeStartMs);
       }
       """
     * def driverFailure = waitUntilDriverActive()
@@ -192,7 +208,8 @@ Feature: Create (or reuse) a compute and wait until it can really execute SQL.
     * def waitUntilReady =
       """
       function() {
-        var deadline = java.lang.System.currentTimeMillis() + warmUpDeadlineMs;
+        var warmUpStartMs = java.lang.System.currentTimeMillis();
+        var deadline = warmUpStartMs + warmUpDeadlineMs;
         var reason = null;
         for (var i = 1; java.lang.System.currentTimeMillis() < deadline; i++) {
           try {
@@ -208,8 +225,8 @@ Feature: Create (or reuse) a compute and wait until it can really execute SQL.
           }
         }
         var failure = 'compute ' + computeName + ': warm-up query still failing after ' + (warmUpDeadlineMs / 60000) + ' min, last error: ' + redact(reason);
-        logDiagnostics(failure);
-        return failure;
+        // the driver is already up, so only what happened during the warm-up counts
+        return logDiagnostics(failure, warmUpStartMs, true);
       }
       """
     * def warmUpFailure = waitUntilReady()

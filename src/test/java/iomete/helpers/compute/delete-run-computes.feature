@@ -1,4 +1,4 @@
-Feature: Delete every compute, Jupyter container, streaming job and event stream one run created, for cleaning up after a cancelled run.
+Feature: Delete every compute, Jupyter container, streaming job, event stream and volume one run created, for cleaning up after a cancelled run.
 
   A cancelled or killed run skips its afterScenario hooks and the cleanup-run teardown, so the
   computes, Jupyter containers, streaming jobs and event streams it created stay up (a streaming
@@ -140,3 +140,9 @@ Feature: Delete every compute, Jupyter container, streaming job and event stream
     * eval java.lang.System.out.println('run ' + runId + ': deleted ' + result.deleted.length + ' event stream(s) in domain ' + domain + (result.deleted.length ? ': ' + result.deleted.join(', ') : ', none matched *' + suffix))
 
     * match result.failed == []
+
+
+  Scenario: delete this run's volume
+    # the volume-attached compute test tags its volume with the run id
+    * call read('classpath:iomete/helpers/volume/delete-run-volume.feature') { tag: 'karate-volume' }
+    * eval java.lang.System.out.println('run ' + runId + ': deleted any volume tagged karate-volume')

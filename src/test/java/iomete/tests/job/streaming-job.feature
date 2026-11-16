@@ -39,6 +39,8 @@ Feature: Streaming jobs, a job started, running, observed and stopped the consol
     When method post
     Then status 200
     * def appId = response.id
+    # the driver pod is job-{appId}-driver on current platforms and {appId}-driver on older ones
+    * def isDriver = function(p){ return p.name.endsWith(appId + '-driver') }
 
     # cold start dominates; stop early if the application ends instead of running
     * configure retry = { count: 60, interval: 10000 }
@@ -53,7 +55,7 @@ Feature: Streaming jobs, a job started, running, observed and stopped the consol
     Given path streamingPath, job.jobId, 'applications', appId, 'instances'
     When method get
     Then status 200
-    And match response[*].name contains 'job-' + appId + '-driver'
+    And match response.find(isDriver) == '#notnull'
 
     # a batch header prints every second once running, but the first can take over a minute after RUNNING
     * configure retry = { count: 36, interval: 5000 }
@@ -77,7 +79,7 @@ Feature: Streaming jobs, a job started, running, observed and stopped the consol
     * configure retry = { count: 24, interval: 5000 }
     Given path streamingPath, job.jobId, 'applications', appId, 'instances'
     # the platform keeps listing a stopped driver, so what has to change is its state
-    And retry until responseStatus == 200 && (response.find(p => p.name == 'job-' + appId + '-driver') || {}).status != 'Running'
+    And retry until responseStatus == 200 && (response.find(isDriver) || {}).status != 'Running'
     When method get
     Then status 200
-    * karate.log('driver after stop:', response.find(p => p.name == 'job-' + appId + '-driver'))
+    * karate.log('driver after stop:', response.find(isDriver))

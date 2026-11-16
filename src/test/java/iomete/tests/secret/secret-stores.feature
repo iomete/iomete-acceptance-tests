@@ -1,9 +1,9 @@
 @lock=api
-Feature: Secrets, written through each API and read back from where the platform keeps them
+Feature: Secrets, written through each API and listed where the platform keeps them
 
   The platform has three secret APIs over two stores. The deprecated v1 API keeps values in the
-  environment's v1 store (a Kubernetes secret by default) and is the only one that hands a value
-  back, so it is the one place a value can be checked end to end. The admin API writes admin-only
+  environment's v1 store (a Kubernetes secret by default). No API hands a value back, so each
+  API is checked by its keys, not its values. The admin API writes admin-only
   and platform-wide (GLOBAL) secrets, and the domain v2 API lists GLOBAL ones next to its own,
   which is the handover a domain user relies on.
 
@@ -17,7 +17,7 @@ Feature: Secrets, written through each API and read back from where the platform
     * def adminPath = 'api/v1/admin/secrets'
     * def deleteSecret = function(path, scope){ karate.call('classpath:iomete/helpers/secret/delete-secret.feature', { secretPath: path, scope: scope }) }
 
-  Scenario: a v1 secret's value is stored, replaced and removed
+  Scenario: a v1 secret is stored, listed, replaced and removed
     * def secretKey = 'karate-secret-v1-' + runId
     # a repeat of `make test-one` keeps the run id, and a v1 POST of an existing key is refused
     # where the v1 store is the database
@@ -28,12 +28,6 @@ Feature: Secrets, written through each API and read back from where the platform
     And request { key: '#(secretKey)', value: 'karate-v1-value' }
     When method post
     Then status 200
-
-    # the value comes back out of the store, not out of the write
-    Given path v1Path, secretKey
-    When method get
-    Then status 200
-    And match response == 'karate-v1-value'
 
     Given path v1Path
     When method get
@@ -46,17 +40,13 @@ Feature: Secrets, written through each API and read back from where the platform
     Then status 200
 
     Given path v1Path, secretKey
-    When method get
-    Then status 200
-    And match response == 'karate-v1-value-updated'
-
-    Given path v1Path, secretKey
     When method delete
     Then status 200
 
-    Given path v1Path, secretKey
+    Given path v1Path
     When method get
-    Then status 404
+    Then status 200
+    And match response !contains secretKey
 
   Scenario: a GLOBAL admin secret reaches the domain listing, an ADMIN one does not
     * def globalKey = 'karate-secret-global-' + runId

@@ -46,6 +46,7 @@ public final class SuiteMain {
         String runId = System.getenv().getOrDefault("IOMETE_RUN_ID", "d" + System.currentTimeMillis() / 1000);
         System.setProperty("iomete.runId", runId);
         System.out.println("Run id: " + runId);
+        System.out.println("Suite commit: " + ApiTest.commit());
 
         if ("cleanup".equals(options)) {
             System.exit(cleanup(false) ? 1 : 0);

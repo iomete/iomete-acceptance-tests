@@ -33,26 +33,32 @@ Feature: Namespace quotas report what is really running in the namespace
     # node types are in millicores, quota rows in cores
     * def driverCpuCores = driverNodeType.cpu / 1000
 
-    * def cpuRequests = function(row){ return row ? row.resourceQuotas.find(q => q.resourceType == 'CPU requests') : null }
+    # The driver's CPU usage row: CPU requests, else CPU limits. Either is at least the driver's
+    # CPU: the platform sets the pod's limit to its request, and Kubernetes keeps a limit at or
+    # above the request and refuses a pod with none where a quota caps limits.cpu. A quota may
+    # cap either one or both
+    * def cpuUsage = function(row){ if (!row) return null; var rows = row.resourceQuotas; return rows.find(q => q.resourceType == 'CPU requests') || rows.find(q => q.resourceType == 'CPU limits') || null }
+    * def quotaTypes = function(row){ return row && row.resourceQuotas.length ? row.resourceQuotas.map(q => q.resourceType).join(', ') : 'none' }
 
-  Scenario: the namespace's CPU-requests usage covers the running compute's driver (v3 quotas)
+  Scenario: the namespace's CPU usage covers the running compute's driver (v3 quotas)
     # the pushed copy, so this also proves the push pipeline carries current usage, not just
     # limits. The copy is the agent's last push, so a push still in flight gets a few seconds.
     # A namespace with no ResourceQuota answers no quotas at all, and so does a plane whose read
-    # fails; quotas are optional, so that skips with a log line
+    # fails; a quota may also cap no CPU. Quotas are optional, so a row with no CPU quota skips
     * def computeRow = function(rows) { return rows.find(n => n.namespace == computeNamespace && n.dataPlane == computePlane) }
-    # a missing row still fails: only a row with an empty quota list skips
-    * def hasQuotas = function(rows) { var row = computeRow(rows); return row == null || row.resourceQuotas.length > 0 }
-    * def covers = function(rows) { var cpu = cpuRequests(computeRow(rows)); return cpu != null && cpu.currentValueNumeric >= driverCpuCores }
+    # a missing row still fails: only a row without a CPU quota skips
+    * def hasCpuQuota = function(rows) { var row = computeRow(rows); return row == null || cpuUsage(row) != null }
+    * def covers = function(rows) { var cpu = cpuUsage(computeRow(rows)); return cpu != null && cpu.currentValueNumeric >= driverCpuCores }
     * configure retry = { count: 6, interval: 5000 }
     Given path 'api/v3/domains', domain, 'namespaces', 'quotas'
-    And retry until responseStatus == 200 && (covers(response) || !hasQuotas(response))
+    And retry until responseStatus == 200 && (covers(response) || !hasCpuQuota(response))
     When method get
-    * if (!hasQuotas(response)) karate.log('no ResourceQuota on ' + computeNamespace + ' (' + computePlane + '), skipping')
-    * if (!hasQuotas(response)) karate.abort()
+    * def row = computeRow(response)
+    * if (!hasCpuQuota(response)) karate.log('no CPU quota on ' + computeNamespace + ' (' + computePlane + '), quotas: ' + quotaTypes(row) + ', skipping')
+    * if (!hasCpuQuota(response)) karate.abort()
     And assert covers(response)
-    * def cpu = cpuRequests(computeRow(response))
-    * karate.log('CPU requests in ' + computeNamespace + ': ' + cpu.currentValueNumeric + ' of ' + cpu.maxValueNumeric + ' cores, driver alone requests ' + driverCpuCores)
+    * def cpu = cpuUsage(row)
+    * karate.log(cpu.resourceType + ' in ' + computeNamespace + ': ' + cpu.currentValueNumeric + ' of ' + cpu.maxValueNumeric + ' cores, driver alone requests ' + driverCpuCores)
 
   Scenario: quotas scoped to the compute priority class cover the running compute's driver (v3 by-resource-type)
     Given path 'api/v3/domains', domain, 'namespaces', 'quotas', 'by-resource-type'
@@ -61,8 +67,8 @@ Feature: Namespace quotas report what is really running in the namespace
     # empty unless the plane maps priority classes AND the namespace has a ResourceQuota scoped
     # to one, which most installs lack, so this only proves something where both exist
     * def computeRows = response.COMPUTE || []
-    * def cpu = cpuRequests(computeRows.find(n => n.namespace == computeNamespace && n.dataPlane == computePlane))
-    * if (!cpu) karate.log('no COMPUTE-scoped CPU requests quota on ' + computeNamespace + ' (' + computePlane + ') — skipping')
+    * def cpu = cpuUsage(computeRows.find(n => n.namespace == computeNamespace && n.dataPlane == computePlane))
+    * if (!cpu) karate.log('no COMPUTE-scoped CPU quota on ' + computeNamespace + ' (' + computePlane + ') — skipping')
     * if (!cpu) karate.abort()
     And assert cpu.currentValueNumeric >= driverCpuCores
 
@@ -117,10 +123,9 @@ Feature: Namespace quotas report what is really running in the namespace
     Then status 200
     * def row = response.find(n => n.namespace == computeNamespace)
     And match row == '#notnull'
-    * if (row.resourceQuotas.length == 0) karate.log('no ResourceQuota on ' + computeNamespace + ', skipping')
-    * if (row.resourceQuotas.length == 0) karate.abort()
-    * def cpu = cpuRequests(row)
-    And match cpu == '#notnull'
+    * def cpu = cpuUsage(row)
+    * if (!cpu) karate.log('no CPU quota on ' + computeNamespace + ', quotas: ' + quotaTypes(row) + ', skipping')
+    * if (!cpu) karate.abort()
     And assert cpu.currentValueNumeric >= driverCpuCores
 
   # Left out on purpose:

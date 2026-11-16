@@ -17,16 +17,33 @@ Feature: Model Gateway connections and provider models, the admin API over the g
   checks the config round trip: stored as sent, and resolved for the model. The endpoint
   grammar's refusals stay in iom-ai-services' tests.
 
+  A provider model names the dialect it speaks. `gcp` routes two, so from 4.1.0 a Google connection
+  serves a Claude model in the `anthropic` dialect beside a Gemini one in `openai`, a model listed
+  under `gcp` without a dialect is refused, and the resolved view carries each model's dialect.
+  Platforms from before the field (up to 4.0.2-rc4) refuse it as unknown, so the other steps send
+  it only where the platform knows it. A chat through the connection needs a real Google key and
+  is not covered.
+
+  Azure serves Claude from the same resource as its OpenAI deployments, so from 4.1.0 an `azure`
+  connection holds a Claude deployment in the `anthropic` dialect beside an OpenAI one, and the
+  resolved view carries each one's dialect. A chat through it needs a real Azure resource and is
+  not covered.
+
   An `azure` connection also carries a provider config, the `resource`: the subdomain of the Azure
   endpoint URL, which becomes the host the gateway calls. Its models are deployment names. Nothing
   contacts Azure at registration, so the resource and the deployment need not exist; the scenario
   checks that the config is stored and resolved, and that the catalog's two refusals hold on the
   real platform (a resource outside the subdomain grammar, an auth type Azure does not take).
 
+  An `anthropic` connection takes no provider config, and its models speak the `anthropic` dialect,
+  which the provider implies. Nothing contacts Anthropic at registration; the scenario checks that
+  the empty config is stored and resolved. The catalog's refusals stay in iom-ai-services' tests.
+
   Provider models have no delete endpoint, so the models this feature lists (`karate-model` for
-  openai, `karate-vertex-model` for gcp, `karate-deployment` for azure) have fixed names and stay
+  openai, `karate-vertex-model` and `karate-vertex-claude` for gcp, `karate-deployment` and
+  `karate-azure-claude` for azure, `karate-claude-model` for anthropic) have fixed names and stay
   in the registry like the domain does: no run deletes them, so overlapping runs cannot take them from each other, and the list
-  keeps one row per provider however many runs there are.
+  keeps one row per provider and model pair however many runs there are.
 
   The whole feature skips on platforms older than 4.0.2, which predate the Model Gateway (builds
   from main count as newer), and where the AI services are not enabled: `ai-services/version`
@@ -69,17 +86,51 @@ Feature: Model Gateway connections and provider models, the admin API over the g
     * def azureDeployment = 'karate-deployment'
     # the subdomain grammar: lowercase letters, digits and hyphens, which runId already is
     * def azureResource = 'karate-res-' + runId
+    # Claude on an Azure connection, next to the OpenAI deployment. Fixed, like azureDeployment
+    * def azureClaudeDeployment = 'karate-azure-claude'
+    * def azureClaudeConnName = 'karate-azure-claude-conn-' + runId
+    * def anthropicConnName = 'karate-anthropic-conn-' + runId
+    # fixed, like providerModel: a model id the anthropic provider's list keeps
+    * def anthropicProviderModel = 'karate-claude-model'
     * def endpointsPath = 'llm-gateway/v1/admin/endpoints'
+    # a provider model names its dialect from 4.0.2-rc5 on. A provider that routes more than one
+    # dialect needs it, while an older gateway refuses the unknown field with a 400
+    * def dialectKnown = platformAtLeast('4.0.2-rc5')
+    * def withDialect = function(body, dialect) { return dialectKnown ? karate.merge(body, { dialect: dialect }) : body }
+    # Claude on a Google connection, next to a Gemini model. Fixed, like gcpProviderModel
+    * def gcpClaudeModel = 'karate-vertex-claude'
+    * def gcpClaudeConnName = 'karate-gcp-claude-conn-' + runId
+    * def gcpClaudeKeyName = 'karate-gcp-claude-key-' + runId
     * def singleConnName = 'karate-single-conn-' + runId
     * def singleKeyName = 'karate-single-key-' + runId
     * def effectiveConnName = 'karate-effective-conn-' + runId
     * def effectiveKeyName = 'karate-effective-key-' + runId
     * def adminHeaders = { 'X-API-Token': '#(token)', Authorization: '#("Bearer " + token)' }
 
+    # a gcp credential: a service-account key file for a throwaway RSA key, made at run time, since
+    # registration only parses it (no GCP credentials, no committed key)
+    * def generateKeyFile =
+      """
+      function(projectId) {
+        var generator = Java.type('java.security.KeyPairGenerator').getInstance('RSA');
+        generator.initialize(2048);
+        var der = generator.generateKeyPair().getPrivate().getEncoded();
+        var body = Java.type('java.util.Base64').getEncoder().encodeToString(der).replace(/(.{64})/g, '$1\n');
+        return JSON.stringify({
+          type: 'service_account',
+          project_id: projectId,
+          private_key_id: 'karate0000000000000000000000000000000000',
+          private_key: '-----BEGIN PRIVATE KEY-----\n' + body.replace(/\n$/, '') + '\n-----END PRIVATE KEY-----\n',
+          client_email: 'karate@' + projectId + '.iam.gserviceaccount.com',
+          token_uri: 'https://oauth2.googleapis.com/token'
+        });
+      }
+      """
+
     # teardown: back to admin first, since the failure that triggers this may have left the
     # scenario acting as another user. The connection goes before its key, models first.
     # Each step is a no-op when its object is gone; any other failure fails the teardown
-    * configure afterScenario =
+    * def baseTeardown =
       """
       function() {
         karate.configure('headers', adminHeaders);
@@ -88,6 +139,8 @@ Feature: Model Gateway connections and provider models, the admin API over the g
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: connName }, what: 'connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: gcpConnName }, what: 'gcp connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: azureConnName }, what: 'azure connection' },
+          { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: azureClaudeConnName }, what: 'azure claude connection' },
+          { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: anthropicConnName }, what: 'anthropic connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: singleConnName }, what: 'single-model connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: effectiveConnName }, what: 'effective-flag connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-provider-key.feature', args: { key: keyName }, what: 'provider key' },
@@ -106,6 +159,7 @@ Feature: Model Gateway connections and provider models, the admin API over the g
         if (failures.length > 0) throw 'teardown failed: ' + failures.join('; ');
       }
       """
+    * configure afterScenario = baseTeardown
 
     # the AI services are enabled, so the gateway routes have to answer
     Given path connectionsPath
@@ -119,8 +173,10 @@ Feature: Model Gateway connections and provider models, the admin API over the g
     * def clearedConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(connName)' }
     * def clearedGcpConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(gcpConnName)' }
     * def clearedAzureConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(azureConnName)' }
+    * def clearedAzureClaudeConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(azureClaudeConnName)' }
     * def clearedKey = call read('classpath:iomete/helpers/ai/delete-provider-key.feature') { key: '#(keyName)' }
     * def clearedGcpKey = call read('classpath:iomete/helpers/ai/delete-provider-key.feature') { key: '#(gcpKeyName)' }
+    * def clearedAnthropicConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(anthropicConnName)' }
     * def clearedSingleConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(singleConnName)' }
     * def clearedEffectiveConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(effectiveConnName)' }
     * def clearedSingleKey = call read('classpath:iomete/helpers/ai/delete-provider-key.feature') { key: '#(singleKeyName)' }
@@ -217,24 +273,7 @@ Feature: Model Gateway connections and provider models, the admin API over the g
     And match response.items[*].name !contains connName
 
   Scenario: a gcp connection stores its self-deployed endpoint and resolves it for its model
-    # the credential: a service-account key file generated here. Registration only parses it
-    * def generateKeyFile =
-      """
-      function(projectId) {
-        var generator = Java.type('java.security.KeyPairGenerator').getInstance('RSA');
-        generator.initialize(2048);
-        var der = generator.generateKeyPair().getPrivate().getEncoded();
-        var body = Java.type('java.util.Base64').getEncoder().encodeToString(der).replace(/(.{64})/g, '$1\n');
-        return JSON.stringify({
-          type: 'service_account',
-          project_id: projectId,
-          private_key_id: 'karate0000000000000000000000000000000000',
-          private_key: '-----BEGIN PRIVATE KEY-----\n' + body.replace(/\n$/, '') + '\n-----END PRIVATE KEY-----\n',
-          client_email: 'karate@' + projectId + '.iam.gserviceaccount.com',
-          token_uri: 'https://oauth2.googleapis.com/token'
-        });
-      }
-      """
+    # the credential: a service-account key file (generateKeyFile, in the Background)
     * def keyFile = generateKeyFile(gcpProject)
     Given path keysPath
     And request { key: '#(gcpKeyName)', value: '#(keyFile)' }
@@ -243,7 +282,7 @@ Feature: Model Gateway connections and provider models, the admin API over the g
 
     # the model has to be in the gcp provider's list: 201, or 409 once any run listed it
     Given path providerModelsPath
-    And request { provider: 'gcp', model: '#(gcpProviderModel)' }
+    And request withDialect({ provider: 'gcp', model: gcpProviderModel }, 'openai')
     When method post
     Then assert responseStatus == 201 || responseStatus == 409
 
@@ -297,6 +336,124 @@ Feature: Model Gateway connections and provider models, the admin API over the g
     When method get
     Then status 404
 
+  Scenario: a gcp connection serves a Claude model beside a Gemini one, each in its own dialect, and a gcp model without a dialect is refused
+    # gcp routes Claude through the Anthropic dialect from 4.1.0 (builds from main count as newer)
+    * if (!platformAtLeast('4.1.0')) karate.log('platform ' + platformVersion + ' predates Claude on gcp connections, skipping')
+    * if (!platformAtLeast('4.1.0')) karate.abort()
+
+    # this scenario's own cleanup, so the other scenarios do not pay for it. The shared teardown
+    # runs first, then the connection before its key (a no-op when the object is gone)
+    * def claudeCleanup =
+      """
+      [
+        { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: gcpClaudeConnName }, what: 'gcp claude connection' },
+        { feature: 'classpath:iomete/helpers/ai/delete-provider-key.feature', args: { key: gcpClaudeKeyName }, what: 'gcp claude provider key' }
+      ]
+      """
+    * configure afterScenario =
+      """
+      function() {
+        var failures = [];
+        try { baseTeardown(); } catch (e) { failures.push(String(e)); }
+        karate.configure('headers', adminHeaders);
+        claudeCleanup.forEach(function(step) {
+          try {
+            karate.call(step.feature, step.args);
+          } catch (e) {
+            karate.log(step.what + ' teardown failed:', e);
+            failures.push(step.what + ': ' + e);
+          }
+        });
+        if (failures.length > 0) throw failures.join('; ');
+      }
+      """
+    # delete first: `make test-one` reuses the run id, so a killed attempt leaves its objects behind
+    * def clearedGcpClaudeConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(gcpClaudeConnName)' }
+    * def clearedGcpClaudeKey = call read('classpath:iomete/helpers/ai/delete-provider-key.feature') { key: '#(gcpClaudeKeyName)' }
+
+    # gcp routes two dialects, so a model listed without one is refused, a listed id included
+    Given path providerModelsPath
+    And request { provider: 'gcp', model: '#(gcpProviderModel)' }
+    When method post
+    Then status 400
+    And match response.error.code == 'invalid_configuration'
+    # the message pins which check refused it, since any other 400 shares the code; the dialect list stays out of it
+    And match response.error.message contains 'dialect is required'
+
+    # the Gemini model and the Claude one, each in its dialect: 201, or 409 once any run listed it
+    Given path providerModelsPath
+    And request { provider: 'gcp', model: '#(gcpProviderModel)', dialect: 'openai' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path providerModelsPath
+    And request { provider: 'gcp', model: '#(gcpClaudeModel)', dialect: 'anthropic' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path providerModelsPath
+    And param provider = 'gcp'
+    When method get
+    Then status 200
+    * def listedClaude = response.items.filter(m => m.model == gcpClaudeModel)
+    And match listedClaude == '#[1]'
+    And match listedClaude[0].dialect == 'anthropic'
+    * def listedGemini = response.items.filter(m => m.model == gcpProviderModel)
+    And match listedGemini == '#[1]'
+    And match listedGemini[0].dialect == 'openai'
+
+    # the credential: a service-account key file (generateKeyFile, in the Background)
+    * def keyFile = generateKeyFile(gcpProject)
+    Given path keysPath
+    And request { key: '#(gcpClaudeKeyName)', value: '#(keyFile)' }
+    When method post
+    Then status 201
+
+    # no endpoint_id: Claude is a publisher model, which a self-deployed endpoint does not serve
+    * def gcpCatalogConfig = { project_id: '#(gcpProject)', location: '#(gcpLocation)' }
+    Given path connectionsPath
+    And request { name: '#(gcpClaudeConnName)', provider: 'gcp', auth_type: 'gcp_service_account', secret_ref: '#(gcpClaudeKeyName)', config: '#(gcpCatalogConfig)', models: [{ model: '#(gcpProviderModel)' }, { model: '#(gcpClaudeModel)' }] }
+    When method post
+    Then status 201
+    And match response contains { name: '#(gcpClaudeConnName)', provider: 'gcp', enabled: true }
+    And match response.config == gcpCatalogConfig
+    And match response.models == '#[2]'
+    And match response.models[*].model contains only [ '#(gcpProviderModel)', '#(gcpClaudeModel)' ]
+    And assert !karate.pretty(response).contains('PRIVATE KEY')
+    * def geminiName = response.models.filter(m => m.model == gcpProviderModel)[0].name
+    * def claudeName = response.models.filter(m => m.model == gcpClaudeModel)[0].name
+
+    # the resolved view: each model speaks the dialect it was listed in
+    Given path endpointsPath, geminiName
+    When method get
+    Then status 200
+    And match response contains { connection: '#(gcpClaudeConnName)', provider: 'gcp', model: '#(gcpProviderModel)', dialect: 'openai', enabled: true }
+    And assert !karate.pretty(response).contains('PRIVATE KEY')
+
+    Given path endpointsPath, claudeName
+    When method get
+    Then status 200
+    And match response contains { connection: '#(gcpClaudeConnName)', provider: 'gcp', model: '#(gcpClaudeModel)', dialect: 'anthropic', enabled: true }
+    And match response.config == gcpCatalogConfig
+    And assert !karate.pretty(response).contains('PRIVATE KEY')
+
+    # delete: models first, then the connection
+    Given path connectionsPath, gcpClaudeConnName, 'models', geminiName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, gcpClaudeConnName, 'models', claudeName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, gcpClaudeConnName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, gcpClaudeConnName
+    When method get
+    Then status 404
+
   Scenario: an azure connection stores its resource and resolves it for its deployment, and the catalog refuses a bad resource and a foreign auth type
     Given path keysPath
     And request { key: '#(keyName)', value: '#(keyValue)' }
@@ -305,7 +462,7 @@ Feature: Model Gateway connections and provider models, the admin API over the g
 
     # the deployment has to be in the azure provider's list: 201, or 409 once any run listed it
     Given path providerModelsPath
-    And request { provider: 'azure', model: '#(azureDeployment)' }
+    And request withDialect({ provider: 'azure', model: azureDeployment }, 'openai')
     When method post
     Then assert responseStatus == 201 || responseStatus == 409
 
@@ -379,6 +536,143 @@ Feature: Model Gateway connections and provider models, the admin API over the g
     Then status 204
 
     Given path connectionsPath, azureConnName
+    When method get
+    Then status 404
+
+  Scenario: an anthropic connection stores an empty config and resolves it for its Claude model
+    # the anthropic provider came after the first gateway release
+    * if (!platformAtLeast('4.1.0')) karate.log('platform ' + platformVersion + ' predates the anthropic provider, skipping')
+    * if (!platformAtLeast('4.1.0')) karate.abort()
+
+    Given path keysPath
+    And request { key: '#(keyName)', value: '#(keyValue)' }
+    When method post
+    Then status 201
+
+    # no dialect: the provider routes one, so it is implied. 201, or 409 once any run listed it
+    Given path providerModelsPath
+    And request { provider: 'anthropic', model: '#(anthropicProviderModel)' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path providerModelsPath
+    And param provider = 'anthropic'
+    When method get
+    Then status 200
+    * def listed = response.items.filter(m => m.model == anthropicProviderModel)
+    And match listed == '#[1]'
+    And match listed[0].dialect == 'anthropic'
+
+    # create: Anthropic takes no provider config, so it comes back empty
+    Given path connectionsPath
+    And request { name: '#(anthropicConnName)', provider: 'anthropic', auth_type: 'static_bearer', secret_ref: '#(keyName)', config: {}, models: [{ model: '#(anthropicProviderModel)' }] }
+    When method post
+    Then status 201
+    And match response contains { name: '#(anthropicConnName)', provider: 'anthropic', auth_type: 'static_bearer', enabled: true }
+    And match response.config == {}
+    And match response.secret_ref.key == keyName
+    And match response.models == '#[1]'
+    And match response.models[0] contains { connection: '#(anthropicConnName)', model: '#(anthropicProviderModel)', enabled: true }
+    * def anthropicModelName = response.models[0].name
+    And assert !karate.pretty(response).contains(keyValue)
+
+    # the resolved view, what the data plane serves a caller's model from, carries the empty config
+    Given path endpointsPath, anthropicModelName
+    When method get
+    Then status 200
+    And match response contains { connection: '#(anthropicConnName)', provider: 'anthropic', model: '#(anthropicProviderModel)', enabled: true }
+    And match response.config == {}
+    And assert !karate.pretty(response).contains(keyValue)
+
+    # delete: models first, then the connection
+    Given path connectionsPath, anthropicConnName, 'models', anthropicModelName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, anthropicConnName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, anthropicConnName
+    When method get
+    Then status 404
+
+  Scenario: an azure connection serves a Claude deployment beside an OpenAI one, each in its own dialect
+    # Claude on azure goes through the Anthropic dialect from 4.1.0 (builds from main count as newer)
+    * if (!platformAtLeast('4.1.0')) karate.log('platform ' + platformVersion + ' predates Claude on azure connections, skipping')
+    * if (!platformAtLeast('4.1.0')) karate.abort()
+
+    Given path keysPath
+    And request { key: '#(keyName)', value: '#(keyValue)' }
+    When method post
+    Then status 201
+
+    # the OpenAI deployment and the Claude one, each in its dialect: 201, or 409 once any run listed it
+    Given path providerModelsPath
+    And request { provider: 'azure', model: '#(azureDeployment)', dialect: 'openai' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path providerModelsPath
+    And request { provider: 'azure', model: '#(azureClaudeDeployment)', dialect: 'anthropic' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path providerModelsPath
+    And param provider = 'azure'
+    When method get
+    Then status 200
+    * def listedClaude = response.items.filter(m => m.model == azureClaudeDeployment)
+    And match listedClaude == '#[1]'
+    And match listedClaude[0].dialect == 'anthropic'
+    * def listedOpenai = response.items.filter(m => m.model == azureDeployment)
+    And match listedOpenai == '#[1]'
+    And match listedOpenai[0].dialect == 'openai'
+
+    # one connection, one resource and key, both deployments
+    Given path connectionsPath
+    And request { name: '#(azureClaudeConnName)', provider: 'azure', auth_type: 'static_bearer', secret_ref: '#(keyName)', config: { resource: '#(azureResource)' }, models: [{ model: '#(azureDeployment)' }, { model: '#(azureClaudeDeployment)' }] }
+    When method post
+    Then status 201
+    And match response contains { name: '#(azureClaudeConnName)', provider: 'azure', enabled: true }
+    And match response.config == { resource: '#(azureResource)' }
+    And match response.models == '#[2]'
+    And match response.models[*].model contains only [ '#(azureDeployment)', '#(azureClaudeDeployment)' ]
+    And assert !karate.pretty(response).contains(keyValue)
+    * def openaiName = response.models.filter(m => m.model == azureDeployment)[0].name
+    * def claudeName = response.models.filter(m => m.model == azureClaudeDeployment)[0].name
+
+    # the resolved view: each deployment speaks the dialect it was listed in, on the same resource
+    Given path endpointsPath, openaiName
+    When method get
+    Then status 200
+    And match response contains { connection: '#(azureClaudeConnName)', provider: 'azure', model: '#(azureDeployment)', dialect: 'openai', enabled: true }
+    And match response.config == { resource: '#(azureResource)' }
+    And match response.secret_ref.key == keyName
+    And assert !karate.pretty(response).contains(keyValue)
+
+    Given path endpointsPath, claudeName
+    When method get
+    Then status 200
+    And match response contains { connection: '#(azureClaudeConnName)', provider: 'azure', model: '#(azureClaudeDeployment)', dialect: 'anthropic', enabled: true }
+    And match response.config == { resource: '#(azureResource)' }
+    And match response.secret_ref.key == keyName
+    And assert !karate.pretty(response).contains(keyValue)
+
+    # delete: models first, then the connection
+    Given path connectionsPath, azureClaudeConnName, 'models', openaiName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, azureClaudeConnName, 'models', claudeName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, azureClaudeConnName
+    When method delete
+    Then status 204
+
+    Given path connectionsPath, azureClaudeConnName
     When method get
     Then status 404
 

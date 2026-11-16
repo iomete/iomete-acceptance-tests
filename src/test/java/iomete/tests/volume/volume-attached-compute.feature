@@ -15,39 +15,36 @@ Feature: Volumes, a volume attached to a compute is wired in and survives being 
   Background:
     * url baseUrl
     * def volumesPath = 'api/v1/admin/volumes'
-    # keyed per run like the compute: this scenario DELETES the volume, so a shared one
-    # would be pulled out from under a concurrent run halfway through
-    * def hostPath = '/mnt/karate-' + runId
+    # emptyDir, since restricted namespaces refuse hostPath; volumes have no name, so a
+    # run-derived size keeps them unique and a tag marks the run's own
+    * def maxSize = 100 + hashString(runId) % 1000
+    * def volumeTag = 'karate-volume'
     * def computeName = 'karate-volume-compute-' + runId
     * def computePath = 'api/v2/domains/' + domain + '/compute'
 
     # a compute is reused as-is once it exists, so drop any left behind by an earlier run
     # rather than testing one that was built without the volume
     * def clearedCompute = call read('classpath:iomete/helpers/compute/delete-compute.feature') { name: '#(computeName)' }
+    * def clearedVolume = call read('classpath:iomete/helpers/volume/delete-run-volume.feature') { tag: '#(volumeTag)' }
 
-    # a leaked compute holds node-pool capacity until someone deletes it, so drop it
-    # here rather than at the end of the scenario, which would miss the failure paths
+    # drop the compute and volume here rather than at the end, which would miss the failure paths
     * configure afterScenario =
       """
       function() {
-        karate.call('classpath:iomete/helpers/compute/delete-compute.feature', { name: computeName });
+        // separate tries, so the volume still goes when the compute delete fails
+        try { karate.call('classpath:iomete/helpers/compute/delete-compute.feature', { name: computeName }); } catch (e) { karate.log('compute teardown failed:', e.message); }
+        try { karate.call('classpath:iomete/helpers/volume/delete-run-volume.feature', { tag: volumeTag }); } catch (e) { karate.log('volume teardown failed:', e.message); }
       }
       """
 
   Scenario: the compute comes up with the volume attached and keeps working after the volume is deleted
-    # create if missing — 409 means an earlier run left one behind with the same type and
-    # path, which is fine; the id is read off the listing either way
+    # the run's own volume was cleared above, so a 409 is someone else's with the same size
     Given path volumesPath
-    And request { type: 'HOST_PATH', hostPath: '#(hostPath)' }
+    And request { type: 'EMPTY_DIR', maxSize: '#(maxSize)', resourceTags: [{ key: '#(volumeTag)', value: '#(runId)' }] }
     When method post
-    Then assert responseStatus == 200 || responseStatus == 409
-
-    Given path volumesPath
-    When method get
+    * if (responseStatus == 409) karate.fail('An EMPTY_DIR volume of ' + maxSize + 'Gi already exists and is not this run\'s; rerun with another IOMETE_RUN_ID')
     Then status 200
-    * def volume = response.find(v => v.type == 'HOST_PATH' && v.hostPath == hostPath)
-    * match volume == '#notnull'
-    * def volumeId = volume.id
+    * def volumeId = response.id
 
     # the helper waits for ACTIVE and proves the compute can really run SQL
     * def created = call read('classpath:iomete/helpers/compute/create-compute.feature') { name: '#(computeName)', volumeId: '#(volumeId)', singleNode: true }
@@ -57,6 +54,29 @@ Feature: Volumes, a volume attached to a compute is wired in and survives being 
     When method get
     Then status 200
     And match response.volumeId == volumeId
+
+    # the running driver got the volume's size limit, which only an attached volume sets.
+    # The key is backquoted, since SET refuses one with hyphens otherwise.
+    # v2 goes through the driver's Arrow Flight listener, which can come up later, so resubmit briefly
+    * def sizeLimitConf = 'spark.kubernetes.executor.volumes.emptyDir.spark-local-dir-1.options.sizeLimit'
+    * def readSizeLimit =
+      """
+      function() {
+        var deadline = java.lang.System.currentTimeMillis() + 3 * 60 * 1000;
+        while (true) {
+          try {
+            return karate.call('classpath:iomete/helpers/query/run-query-v2.feature', { computeName: computeName, statement: 'SET `' + sizeLimitConf + '`', retryCount: 10 });
+          } catch (e) {
+            if (java.lang.System.currentTimeMillis() > deadline) throw e;
+            karate.log('v2 submit not ready yet, retrying:', e.message);
+            java.lang.Thread.sleep(5000);
+          }
+        }
+      }
+      """
+    * def conf = readSizeLimit()
+    * karate.log('size limit conf:', conf.result)
+    And match conf.result.values == ([sizeLimitConf, maxSize + 'Gi'])
 
     # delete the volume out from under the running compute
     Given path volumesPath, volumeId

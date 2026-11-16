@@ -73,7 +73,8 @@ Feature: Maintenance, the runs that were asked for actually run
     # so the account is denied INSERT there without this. It is shared rather than run-owned, so
     # only this account gets it, and only for this scenario. The run's catalog is listed too only
     # to keep the resource set unique per run: two policies on the same resources are refused.
-    * def stagingDatabases = [ catalogName + '.*', 'default_rewrite_catalog.*' ]
+    # in parentheses, or the step reads the array as JSON and keeps `catalogName + '.*'` as text
+    * def stagingDatabases = ([ catalogName + '.*', 'default_rewrite_catalog.*' ])
     * def staging =
       """
       {

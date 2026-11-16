@@ -184,6 +184,7 @@ function fn() {
     gatewayHostPort: gatewayHostPort,
     gatewaySsl: gatewaySsl,
     runId: runId,
+    hashString: hashString,
     fixtures: fixtures,
 
     imageRef: imageRef,
@@ -341,14 +342,15 @@ function fn() {
 
   // What the Model Gateway answers when the provider gave it nothing to relay: its own 502/504
   // "no answer" messages (a data plane with no way out, such as an air-gapped install), and the
-  // statuses a busy provider answers with (its uptime, not the route's). The features that call a
-  // real provider with a fake key excuse these; the list lives here so a gateway rename is one edit.
+  // statuses a busy provider answers with (its uptime, not the route's; 529 is Anthropic's overload,
+  // which the gateway keeps). The features that call a real provider with a fake key excuse these;
+  // the list lives here so a gateway rename is one edit.
   const gatewayNoAnswerMessages = ['backend unreachable', 'backend did not respond in time', 'backend answered with a redirect', 'backend answer was cut off', 'backend credential unavailable', 'no answer from the backend'];
   config.gatewayNoAnswer = function(status, message) {
     return (status == 502 || status == 504) && gatewayNoAnswerMessages.indexOf(message) >= 0;
   };
   config.providerBusy = function(status) {
-    return status == 429 || status == 500 || status == 503;
+    return status == 429 || status == 500 || status == 503 || status == 529;
   };
 
   // How computes and jobs pick a data plane: users choose a strategy, never a plane. The

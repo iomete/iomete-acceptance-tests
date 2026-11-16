@@ -2,9 +2,11 @@
 Feature: Log what the platform reports about an event stream that did not start.
   Called before a wait on the stream gives up, while the stream still exists:
     karate.call('classpath:iomete/helpers/event-stream/log-stream-diagnostics.feature',
-                { streamId: '...', streamName: 'my-stream', namespace: '...', why: 'never became ACTIVE' })
+                { streamId: '...', streamName: 'my-stream', namespace: '...', why: 'never became ACTIVE', since: <epoch ms> })
   Logs the stream's status, pods, Kubernetes events and its namespace's quota. It never fails:
   a call that errors is logged with its status, so the caller's own failure is what the run reports.
+  Returns shortage, a plain-words explanation of a quota or node capacity shortage (see
+  resource-shortage.js) or null, read only from events after since.
 
   Scenario: log the stream's status, pods, events and namespace quota
     * def streamPath = 'api/v1/domains/' + domain + '/event-streams'
@@ -42,3 +44,10 @@ Feature: Log what the platform reports about an event stream that did not start.
     When method get
     * def namespaceRows = responseStatus == 200 && Array.isArray(response) ? response.filter(n => n.namespace == namespace) : null
     * section('namespace quota (' + responseStatus + ')', short(namespaceRows ? namespaceRows : response))
+
+    # returned to the caller, which adds it to the failure message
+    * def resourceShortage = read('classpath:iomete/helpers/namespace/resource-shortage.js')
+    # event streams run on the local plane only
+    * def quotaRow = namespaceRows ? namespaceRows.find(n => (n.dataPlane || 'default') == 'default') : null
+    * def shortage = resourceShortage({ subject: 'event stream ' + streamName, namespace: namespace, events: events, quotaRows: quotaRow ? quotaRow.resourceQuotas : [], since: karate.get('since', 0) })
+    * if (shortage) karate.log('[diagnostics ' + streamName + '] ' + redact(shortage.text))
