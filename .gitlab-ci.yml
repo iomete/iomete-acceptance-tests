@@ -1,0 +1,98 @@
+# Runs the acceptance tests from GitLab CI, against the IOMETE install you point it at.
+# No install is built in: set IOMETE_BASE_URL and the credentials as CI/CD variables (see the
+# README, "Running from GitLab CI"). Every variable below is a default; a project, group,
+# schedule or "Run pipeline" variable of the same name overrides it.
+#
+# It runs only when started by hand, on a schedule or through the API, and only when
+# IOMETE_BASE_URL is set, so a push never starts a run.
+
+variables:
+  IOMETE_BASE_URL:
+    value: ""
+    description: "Your IOMETE console address, e.g. https://iomete.example.com. Required."
+  IOMETE_ADMIN_USERNAME:
+    value: "admin"
+    description: "Admin username. Set IOMETE_ADMIN_PASSWORD (or IOMETE_TOKEN) as a masked project variable, never here."
+  IOMETE_DOMAIN:
+    value: ""
+    description: "An existing domain to run in. Empty creates one for the run and deletes it afterwards."
+  IOMETE_SPARK_IMAGE:
+    value: ""
+    description: "Spark image tag to test. Empty uses the suite's default."
+  IOMETE_IMAGE_REGISTRY:
+    value: ""
+    description: "Registry and path to pull Spark images from, if you use a mirror. Empty uses the public IOMETE registry."
+  IOMETE_ALLOW_PLATFORM_CHANGES:
+    value: "false"
+    options: ["false", "true"]
+    description: "true also runs the tests that change platform-wide state."
+  IOMETE_DATA_PLANE_STRATEGY:
+    value: "local"
+    options: ["local", "external", "mixed"]
+    description: "With several data planes: which ones computes and jobs run on."
+  KARATE_OPTIONS:
+    value: ""
+    description: "Run part of the suite, e.g. --tags @spark3 or src/test/java/iomete/tests/sql. Empty runs everything."
+  # The image the jobs run in. Needs Java 21; point it at a mirror if the runner cannot pull from Docker Hub.
+  JAVA_IMAGE: "eclipse-temurin:21-jdk"
+  # Keep the Maven wrapper and dependencies inside the project, so the cache below can keep them
+  MAVEN_USER_HOME: "$CI_PROJECT_DIR/.m2"
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+workflow:
+  rules:
+    - if: $IOMETE_BASE_URL && $CI_PIPELINE_SOURCE =~ /^(web|schedule|api|trigger)$/
+
+stages:
+  - test
+  - cleanup
+
+default:
+  image: $JAVA_IMAGE
+  cache:
+    key:
+      files:
+        - pom.xml
+        - .mvn/wrapper/maven-wrapper.properties
+    paths:
+      - .m2/
+
+acceptance-tests:
+  stage: test
+  timeout: 3h
+  script:
+    # The suite writes this run's id to target/.karate-run-id; the cleanup job reads it from the
+    # artifacts, so it removes exactly what this run created. IOMETE_RUN_ID, when set, wins.
+    - |
+      if [ -n "$KARATE_OPTIONS" ]; then
+        ./mvnw -B test -Dkarate.options="$KARATE_OPTIONS"
+      else
+        ./mvnw -B test
+      fi
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - target/karate-reports/
+      - target/.karate-run-id
+    reports:
+      junit: target/surefire-reports/TEST-*.xml
+
+# Removes what the run created, whether the tests passed or failed. A cancelled pipeline skips
+# it: retry this job by hand to clean up after one.
+cleanup:
+  stage: cleanup
+  when: always
+  timeout: 1h
+  needs:
+    - job: acceptance-tests
+      artifacts: true
+  script:
+    - ./mvnw -B test -Dkarate.options="--output target/karate-teardown src/test/java/iomete/helpers/cleanup-run-fixtures.feature" || true
+    - ./mvnw -B test -Dkarate.options="--output target/karate-teardown src/test/java/iomete/helpers/compute/delete-run-computes.feature" || true
+    - ./mvnw -B test -Diomete.teardown=true -Dkarate.options="--output target/karate-teardown src/test/java/iomete/helpers/cleanup-run-domain.feature"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - target/karate-teardown/
