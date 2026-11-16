@@ -25,7 +25,7 @@ variables:
   IOMETE_ALLOW_PLATFORM_CHANGES:
     value: "false"
     options: ["false", "true"]
-    description: "true also runs the tests that change platform-wide state."
+    description: "true also runs the tests that change platform-wide state. WARNING: they change settings every user of the install sees (system settings, Docker registries, SSO, rollout flags), and some are left behind after the run. Only turn it on for a disposable test install."
   IOMETE_DATA_PLANE_STRATEGY:
     value: "local"
     options: ["local", "external", "mixed"]
