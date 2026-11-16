@@ -56,14 +56,17 @@ Feature: Event Stream — scale, stop, update and start a stream
     * def podPrefix = 'es-' + streamName + '-'
 
     # Starting pods takes a few minutes. A JS loop rather than `retry until`, so the
-    # diagnostics can still run when it times out.
+    # diagnostics can still run when it times out. Every 30s it also checks for quota
+    # refusals and gives up early once they have lasted 2 minutes.
     * def activeDeadlineMs = 5 * 60 * 1000
     * def waitUntilActive =
       """
       function() {
-        var deadline = java.lang.System.currentTimeMillis() + activeDeadlineMs;
+        var startedMs = java.lang.System.currentTimeMillis();
+        var deadline = startedMs + activeDeadlineMs;
         var status = null;
-        while (java.lang.System.currentTimeMillis() < deadline) {
+        var failure = null;
+        for (var i = 1; failure == null && java.lang.System.currentTimeMillis() < deadline; i++) {
           try {
             var read = karate.call('classpath:iomete/helpers/event-stream/get-stream.feature', { streamId: streamId });
             status = read.stream ? read.stream.status : 'HTTP ' + read.status;
@@ -71,11 +74,22 @@ Feature: Event Stream — scale, stop, update and start a stream
             status = 'request failed: ' + redact((e.message + '').split('\n')[0]);
           }
           if (status == 'ACTIVE') return true;
-          java.lang.Thread.sleep(5000);
+          if (i % 6 == 0) {
+            // a failed check only skips this round, it never replaces the stream's own failure
+            try {
+              var check = karate.call('classpath:iomete/helpers/event-stream/check-resource-shortage.feature', { streamId: streamId, streamName: streamName, namespace: placement.namespace, since: startedMs });
+              if (check.shortage && check.shortage.refused) karate.log('stream ' + streamName + ' is waiting on the namespace quota: ' + redact(check.shortage.text));
+              if (check.shortage && check.shortage.giveUp) failure = 'stream ' + streamName + ': gave up after ' + ((java.lang.System.currentTimeMillis() - check.shortage.firstRefusalMs) / 60000 | 0) + ' min of quota refusals, last status ' + status;
+            } catch (e) {
+              karate.log('quota check failed: ' + redact((e.message + '').split('\n')[0]));
+            }
+          }
+          if (failure == null) java.lang.Thread.sleep(5000);
         }
-        var failure = 'stream ' + streamName + ': not ACTIVE after ' + (activeDeadlineMs / 60000) + ' min, last status ' + status;
+        if (failure == null) failure = 'stream ' + streamName + ': not ACTIVE after ' + (activeDeadlineMs / 60000) + ' min, last status ' + status;
         try {
-          karate.call('classpath:iomete/helpers/event-stream/log-stream-diagnostics.feature', { streamId: streamId, streamName: streamName, namespace: placement.namespace, why: failure });
+          var d = karate.call('classpath:iomete/helpers/event-stream/log-stream-diagnostics.feature', { streamId: streamId, streamName: streamName, namespace: placement.namespace, why: failure, since: startedMs });
+          if (d.shortage) failure = redact(d.shortage.text) + '\nDetails: ' + failure;
         } catch (e) {
           karate.log('stream diagnostics failed: ' + redact(e.message));
         }

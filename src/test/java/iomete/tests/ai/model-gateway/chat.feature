@@ -10,13 +10,24 @@ Feature: Model Gateway chat route, its refusals and the request id
   iom-ai-services' tests, as does the use-permission refusal.
 
   One scenario needs nothing from the platform's state (no token, an unmatched path), so it runs
-  everywhere the gateway does. The other two create a connection over a fake key and list the fixed
-  `karate-model` provider model, which has no delete endpoint and stays in the registry, so they run
-  only where `IOMETE_ALLOW_PLATFORM_CHANGES` allows that, like `connections.feature`.
+  everywhere the gateway does. The others create a connection over a fake key and list a fixed
+  provider model (`karate-model`, or `karate-claude-model` for anthropic), which has no delete
+  endpoint and stays in the registry, so they run only where `IOMETE_ALLOW_PLATFORM_CHANGES` allows
+  that, like `connections.feature`.
 
-  The key-refusal scenario needs the provider to answer. An install with no way out (an air-gapped
-  customer) gets the gateway's own no-answer replies instead, and a busy provider answers 429, 500
-  or 503; the scenario skips on both, as `connection-test.feature` excuses them.
+  An `anthropic` connection over a fake key shows that a chat reaches Anthropic and that its
+  refusal of the key comes back translated: Anthropic's own `authentication_error` arrives as the
+  same 502 the openai refusal is, under `upstream`. Only a real deployment shows the gateway reaches
+  Anthropic; the translation itself, streamed answers included, stays in iom-ai-services' tests.
+  Anthropic refuses the key before it reads the body, so this does not show the body was a valid
+  Messages request; that needs a real key and stays out of the suite.
+
+  The key-refusal scenarios need the provider to answer. An install with no way out (an air-gapped
+  customer) gets the gateway's own no-answer replies instead, and a busy provider answers 429, 500,
+  503 or (Anthropic) 529; each scenario skips on both, as `connection-test.feature` excuses them. A
+  busy status in the gateway's own envelope (`iomete_gateway_error`) is not the provider's: a 500
+  `internal_error` before anything is sent (a dialect the gateway cannot serve) or a platform
+  outage fails the scenario instead of skipping it.
 
   The gateway caches a registry row for 30 seconds and remembers a missing or disabled name for 5,
   so a scenario never flips a flag on a name it has already called. The disabled cases are created
@@ -44,11 +55,14 @@ Feature: Model Gateway chat route, its refusals and the request id
     * def connName = 'karate-chat-conn-' + runId
     * def offModelConnName = 'karate-chat-moff-' + runId
     * def offConnName = 'karate-chat-coff-' + runId
+    * def anthropicConnName = 'karate-chat-anth-' + runId
     * def keyName = 'karate-chat-key-' + runId
     # fake: the provider has to refuse it, and nothing here ever reaches a real account
     * def keyValue = 'karate-chat-key-value-' + runId
     # fixed: provider models cannot be deleted
     * def providerModel = 'karate-model'
+    # fixed, like providerModel: a model id the anthropic provider's list keeps
+    * def anthropicProviderModel = 'karate-claude-model'
     # a request id a client might send; the gateway makes its own and never echoes this one
     * def clientId = 'karate-client-request-id-' + runId
     * def adminHeaders = { 'X-API-Token': '#(token)', Authorization: '#("Bearer " + token)' }
@@ -59,6 +73,9 @@ Feature: Model Gateway chat route, its refusals and the request id
     * def responseHeader = function(name) { var values = responseHeaderValues(name); return values.length > 0 ? values[0] : null; }
     # every header the response carries, lowercased
     * def headerNames = function() { var names = []; var all = karate.get('responseHeaders'); for (var k in all) names.push(k.toLowerCase()); return names; }
+    # a busy provider's 429/500/503/529, as relayed: the gateway's own error of that status (a 500
+    # internal_error for a dialect it cannot serve, a 503 outage) is not the provider's, and fails
+    * def providerBusyReply = function(status, body) { return providerBusy(status) && !(body && body.error && body.error.type == 'iomete_gateway_error'); }
 
     # teardown: back to admin first, since a scenario may have cleared the headers. Each step is a
     # no-op when its object is gone; any other failure fails the teardown
@@ -71,6 +88,7 @@ Feature: Model Gateway chat route, its refusals and the request id
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: connName }, what: 'connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: offModelConnName }, what: 'connection with a disabled model' },
           { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: offConnName }, what: 'disabled connection' },
+          { feature: 'classpath:iomete/helpers/ai/delete-connection.feature', args: { name: anthropicConnName }, what: 'anthropic connection' },
           { feature: 'classpath:iomete/helpers/ai/delete-provider-key.feature', args: { key: keyName }, what: 'provider key' }
         ];
         steps.forEach(function(step) {
@@ -126,8 +144,8 @@ Feature: Model Gateway chat route, its refusals and the request id
     When method post
 
     # an install with no way out to the provider gets the gateway's no-answer replies, and a busy
-    # provider answers 429/500/503: both say nothing about the refusal this scenario is about
-    * def noReply = providerBusy(responseStatus) || (response.error && gatewayNoAnswer(responseStatus, response.error.message))
+    # provider answers 429/500/503/529: both say nothing about the refusal this scenario is about
+    * def noReply = providerBusyReply(responseStatus, response) || (response.error && gatewayNoAnswer(responseStatus, response.error.message))
     * if (noReply) karate.log('the provider gave no verdict on the key (' + responseStatus + '), skipping the refusal check')
     * if (noReply) karate.abort()
 
@@ -148,6 +166,61 @@ Feature: Model Gateway chat route, its refusals and the request id
     And assert responseHeader('www-authenticate') == null
     And assert headerNames().filter(n => n.startsWith('openai-') || n.startsWith('x-openai-')).length == 0
     # and the stored key's value is not echoed
+    And assert !karate.pretty(response).contains(keyValue)
+
+  Scenario: a chat through an anthropic connection reaches Anthropic and its refusal of the key comes back translated
+    # the anthropic provider came after the first gateway release
+    * if (!platformAtLeast('4.1.0')) karate.log('platform ' + platformVersion + ' predates the anthropic provider, skipping')
+    * if (!platformAtLeast('4.1.0')) karate.abort()
+
+    # creates a provider model that stays, so only where the install allows that
+    * if (!platformChangesAllowed()) karate.log('IOMETE_ALLOW_PLATFORM_CHANGES is not true, skipping a test that lists a provider model')
+    * if (!platformChangesAllowed()) karate.abort()
+
+    * def clearedConnection = call read('classpath:iomete/helpers/ai/delete-connection.feature') { name: '#(anthropicConnName)' }
+    * def clearedKey = call read('classpath:iomete/helpers/ai/delete-provider-key.feature') { key: '#(keyName)' }
+
+    Given path keysPath
+    And request { key: '#(keyName)', value: '#(keyValue)' }
+    When method post
+    Then status 201
+
+    # no dialect: anthropic routes only its own. 201, or 409 once any run listed it
+    Given path providerModelsPath
+    And request { provider: 'anthropic', model: '#(anthropicProviderModel)' }
+    When method post
+    Then assert responseStatus == 201 || responseStatus == 409
+
+    Given path connectionsPath
+    And request { name: '#(anthropicConnName)', provider: 'anthropic', auth_type: 'static_bearer', secret_ref: '#(keyName)', models: [{ name: '#(anthropicConnName)', model: '#(anthropicProviderModel)' }] }
+    When method post
+    Then status 201
+    * def endpoint = response.models[0].name
+
+    # the key is fake, so Anthropic answers 401 before it reads the body the gateway sent
+    Given path chatPath
+    And header x-iomete-request-id = clientId
+    And request chatBody(endpoint)
+    When method post
+
+    * def noReply = providerBusyReply(responseStatus, response) || (response.error && gatewayNoAnswer(responseStatus, response.error.message))
+    * if (noReply) karate.log('the provider gave no verdict on the key (' + responseStatus + '), skipping the refusal check')
+    * if (noReply) karate.abort()
+
+    Then status 502
+    And match response.error.code == 'upstream_error'
+    And match response.error.type == 'iomete_gateway_error'
+    And match response.error.message == "backend refused the connection's credential"
+    # Anthropic's own refusal, which only a request that reached it gets back
+    And match response.error.upstream.type == 'authentication_error'
+    And match responseHeader('x-should-retry') == 'false'
+    And match responseHeader('x-iomete-request-id') == '#string'
+    And assert responseHeader('x-iomete-request-id') != clientId
+
+    # nothing of the provider's own answer is relayed with the refusal. Only names Anthropic alone
+    # sends are checked: an edge in front of the install adds its own (cf-ray)
+    And assert responseHeader('www-authenticate') == null
+    And assert headerNames().filter(n => n.startsWith('anthropic-')).length == 0
     And assert !karate.pretty(response).contains(keyValue)
 
   Scenario: no token is a 401 and an unmatched path answers the JSON envelope, each with a request id of the gateway's own

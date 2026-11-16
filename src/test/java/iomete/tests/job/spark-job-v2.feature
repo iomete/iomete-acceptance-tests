@@ -55,7 +55,8 @@ Feature: Spark jobs V2, a job the console's way, run, observed, retried and kill
     Given path jobsPath, job.jobId, 'runs', appId, 'instances'
     When method get
     Then status 200
-    And match response[*].name contains 'job-' + appId + '-driver'
+    # job-{appId}-driver on current platforms, {appId}-driver on older ones
+    And match response.find(p => p.name.endsWith(appId + '-driver')) == '#notnull'
 
     # the driver's own output, read from the pod; SparkPi prints its estimate
     * configure retry = { count: 12, interval: 5000 }

@@ -13,7 +13,7 @@ Feature: Model Gateway connection test, probing a connection its body describes 
   `error.status` and `error.message`. A refused key is the provider's 401 or 403, not the data
   plane's 502 rewrite. Whether the data plane can reach the provider at all depends on the
   install (an air-gapped one cannot), so every result is held to 401/403 except a busy provider
-  (429, 500, 503) and the gateway's own no-answer 502/504. The shape is checked everywhere.
+  (429, 500, 503, or Anthropic's 529) and the gateway's own no-answer 502/504. The shape is checked everywhere.
 
   Provider models have no delete endpoint, so the two this feature lists (`karate-model` and
   `karate-test-model`, both openai) have fixed names and stay in the registry, like the ones in

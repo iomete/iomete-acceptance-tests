@@ -2,10 +2,12 @@
 Feature: Log what the platform reports about a compute that did not become ready.
   Called by create-compute.feature before it gives up, while the compute still exists:
     karate.call('classpath:iomete/helpers/compute/log-compute-diagnostics.feature',
-                { computeId: '...', computeName: 'my-compute', why: 'driver never became ACTIVE' })
+                { computeId: '...', computeName: 'my-compute', why: 'driver never became ACTIVE', since: <epoch ms> })
   Reads the compute's status, pods, Kubernetes events, recent driver and executor logs and its
   namespace's quota, and logs a short summary of each. It never fails: a call that errors is
-  logged with its status, so the caller's own failure is what the run reports.
+  logged with its status, so the caller's own failure is what the run reports. Returns shortage,
+  a plain-words explanation of a quota or node capacity shortage (see resource-shortage.js) or null,
+  read only from events and log lines after since.
 
   Scenario: log the compute's status, pods, events, recent logs and namespace quota
     * def computePath = 'api/v2/domains/' + domain + '/compute'
@@ -51,7 +53,9 @@ Feature: Log what the platform reports about a compute that did not become ready
     And path computePath, computeId, 'logs'
     And param range = '15m'
     When method get
-    * section('driver log, last ' + logTailLines + ' lines (' + responseStatus + ')', responseStatus == 200 && Array.isArray(response) ? logLines(response) : short(response))
+    * def logEntries = responseStatus == 200 && Array.isArray(response) ? response : []
+    * def driverLog = logLines(logEntries)
+    * section('driver log, last ' + logTailLines + ' lines (' + responseStatus + ')', driverLog ? driverLog : short(response))
 
     * def executors = instances.filter(p => !p.name.endsWith('-driver'))
     * def logExecutor =
@@ -69,3 +73,10 @@ Feature: Log what the platform reports about a compute that did not become ready
     When method get
     * def namespaceRows = responseStatus == 200 && Array.isArray(response) && compute ? response.filter(n => n.namespace == compute.namespace) : null
     * section('namespace quota (' + responseStatus + ')', short(namespaceRows ? namespaceRows : response))
+
+    # returned to the caller, which adds it to the failure message
+    * def resourceShortage = read('classpath:iomete/helpers/namespace/resource-shortage.js')
+    # the compute's own plane, since namespaces on different planes can share a name
+    * def quotaRow = namespaceRows ? namespaceRows.find(n => (n.dataPlane || 'default') == (compute.dataPlane || 'default')) : null
+    * def shortage = resourceShortage({ subject: 'compute ' + computeName, namespace: compute ? compute.namespace : null, events: events, logEntries: logEntries, quotaRows: quotaRow ? quotaRow.resourceQuotas : [], since: karate.get('since', 0) })
+    * if (shortage) karate.log('[diagnostics ' + computeName + '] ' + redact(shortage.text))

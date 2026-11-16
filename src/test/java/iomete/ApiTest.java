@@ -1,9 +1,11 @@
 package iomete;
 
 import io.karatelabs.core.RunEvent;
+import io.karatelabs.core.RunEventType;
 import io.karatelabs.core.Runner;
 import io.karatelabs.core.ScenarioResult;
 import io.karatelabs.core.ScenarioRunEvent;
+import io.karatelabs.core.SuiteRunEvent;
 import io.karatelabs.junit6.JUnitBridgeListener;
 import io.karatelabs.junit6.StreamingTestIterator;
 import io.karatelabs.junit6.TestEvent;
@@ -18,7 +20,9 @@ import io.karatelabs.gherkin.FeatureSection;
 import io.karatelabs.gherkin.Tag;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 class ApiTest {
@@ -34,6 +39,9 @@ class ApiTest {
     // Where the progress lines go. logback-test.xml has to keep this at INFO, since the root
     // logger is WARN.
     private static final Logger PROGRESS = LoggerFactory.getLogger("karate.progress");
+
+    // How many scenarios have finished out of how many, for the outcome lines.
+    private static final ProgressTracker TRACKER = new ProgressTracker();
 
     // How long to wait for the next scenario to report before giving up on the run. Kept under
     // the workflow's own timeout, so a hung suite fails here, with a report, rather than
@@ -52,6 +60,11 @@ class ApiTest {
     // one and let the lanes alone decide what runs.
     static final int THREADS = 1000;
 
+    private static final int SHORT_SHA = 7;
+
+    // git can block on a stuck lock, and this runs before the watchdog starts
+    private static final long GIT_TIMEOUT_SECONDS = 5;
+
     // This is what `Karate.run("classpath:iomete/tests")` does, spelled out, because the JUnit
     // wrapper takes no RunListener and the progress lines need one: an `afterScenario` hook in
     // karate-config.js would have been the easier route, but a feature that sets its own
@@ -59,6 +72,7 @@ class ApiTest {
     // and */setup/ run when called.
     @TestFactory
     Stream<DynamicNode> testAll() throws IOException, URISyntaxException {
+        PROGRESS.info("Suite commit: {}", commit());
         String options = System.getProperty("karate.options");
         checkLanes(options);
         if (runsCustomTests(options)) {
@@ -80,6 +94,40 @@ class ApiTest {
                 .supplyAsync(() -> builder.parallel(THREADS))
                 .whenComplete((result, error) -> bridge.complete(result));
         return new StreamingTestIterator(events, true, EVENT_TIMEOUT_MINUTES).stream();
+    }
+
+    // The suite's commit: set by the image build or CI, otherwise read from the checkout.
+    static String commit() {
+        String given = System.getenv("SUITE_COMMIT");
+        if (given != null && !given.isBlank()) {
+            return given.substring(0, Math.min(SHORT_SHA, given.length()));
+        }
+
+        Process git = null;
+        try {
+            // --exclude=* leaves tags out, so it prints the hash, plus -dirty for local edits
+            git = new ProcessBuilder("git", "describe", "--always", "--dirty", "--exclude=*", "--abbrev=" + SHORT_SHA)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (git.waitFor(GIT_TIMEOUT_SECONDS, TimeUnit.SECONDS) && git.exitValue() == 0) {
+                try (InputStream out = git.getInputStream()) {
+                    String sha = new String(out.readAllBytes(), StandardCharsets.UTF_8).trim();
+                    if (!sha.isEmpty()) {
+                        return sha;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // no git or no checkout, e.g. a copy of the suite without its history
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (git != null) {
+                git.destroy();
+            }
+        }
+
+        return "unknown";
     }
 
     static List<String> testPaths() {
@@ -186,11 +234,19 @@ class ApiTest {
         return tags == null ? List.of() : tags.stream().map(Tag::getName).toList();
     }
 
-    // Names the scenario as it starts and again with its outcome, so the run log is more than a
-    // stream of requests and a scenario that polls for minutes cannot be mistaken for a hang.
+    // Names the scenario as it starts and again with its outcome and how far the run is
+    // ([done/total]), so the run log is more than a stream of requests and a scenario that
+    // polls for minutes cannot be mistaken for a hang.
     static boolean logProgress(RunEvent event) {
         try {
-            if (event instanceof ScenarioRunEvent scenarioEvent) {
+            if (event instanceof SuiteRunEvent suiteEvent) {
+                if (suiteEvent.type() == RunEventType.SUITE_ENTER) {
+                    TRACKER.start(suiteEvent.source());
+                    PROGRESS.info(TRACKER.plan());
+                } else if (suiteEvent.result() != null) {
+                    PROGRESS.info(ProgressTracker.summary(suiteEvent.result()));
+                }
+            } else if (event instanceof ScenarioRunEvent scenarioEvent) {
                 Map<String, Object> data = scenarioEvent.toJson();
                 // a feature reached through karate.call, which is part of its caller's scenario
                 if (!Integer.valueOf(0).equals(data.get("callDepth"))) {
@@ -199,10 +255,15 @@ class ApiTest {
                 String label = data.get("feature") + " | " + data.get("name");
                 ScenarioResult result = scenarioEvent.result();
                 if (result == null) {
+                    TRACKER.scenarioStarted(scenarioEvent.source().getScenario());
                     PROGRESS.info(">> RUN  {}", label);
                 } else {
                     String outcome = result.isFailed() ? "FAIL" : result.isSkipped() ? "SKIP" : "PASS";
-                    PROGRESS.info("<< {} {} ({} ms)", outcome, label, result.getDurationMillis());
+                    // counted and logged together, so the counters come out in order
+                    synchronized (TRACKER) {
+                        String counter = TRACKER.scenarioFinished(scenarioEvent.source().getScenario());
+                        PROGRESS.info("<< {} {} {} ({} ms)", outcome, counter, label, result.getDurationMillis());
+                    }
                 }
             }
         } catch (Exception e) {

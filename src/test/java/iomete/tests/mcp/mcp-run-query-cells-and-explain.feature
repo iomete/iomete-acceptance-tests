@@ -35,16 +35,15 @@ Feature: MCP server - run_query steers agents past complex cells and failed EXPL
 
   Scenario: to_json returns complex cells as JSON, and the raw cells come back as text
     * def sqlCompute = karate.callSingle('classpath:iomete/tests/sql/setup/sql-compute.feature', { domain: domain })
-    # MCP submits through the v1 SQL API, which only reaches a compute on the local plane
+    # with sqlEditorV2 off MCP submits through the v1 SQL API, which only reaches a compute on the local plane;
+    # with it on the query goes to v2, which has not been run on a remote plane for this scenario
     * if (isRemotePlane(sqlCompute.computeDataPlane)) { karate.log('compute is on a remote plane, skipping'); karate.abort() }
     * def sql = "SELECT named_struct('a', 1, 'b', 'x,y') AS s, array(1, 2) AS a, map('k', 'v') AS m, to_json(named_struct('a', 1, 'b', 'x,y')) AS s_json, to_json(array(1, 2)) AS a_json, to_json(map('k', 'v')) AS m_json"
     * def runQueryResponse = callTool('run_query', { domain: domain, compute_cluster: sqlCompute.computeName, sql: sql })
     * def query = runQueryResponse.structuredContent.value
     # run_query returns once its inline wait ends, so a slow compute can answer SUBMITTED or RUNNING; the rows then come from get_query_result
-    * def statusOf = function(queryId){ return callTool('get_query_status', { domain: domain, query_id: queryId }).structuredContent.query_status.status }
-    * def notSettled = ['SUBMITTED', 'RUNNING', 'CANCELLING']
-    * def waitFinished = function(queryId){ var s; for (var i = 0; i < 30; i++) { s = statusOf(queryId); if (notSettled.indexOf(s) < 0) return s; java.lang.Thread.sleep(2000) } return s }
-    * def rowsOf = function(q){ if (q.query_status == 'COMPLETED') return q.query_result.rows; var s = waitFinished(q.query_id); if (s != 'COMPLETED') karate.fail('query ' + q.query_id + ' ended ' + s); return callTool('get_query_result', { domain: domain, query_id: q.query_id }).structuredContent.value.query_result.rows }
+    * def waitFinished = read('classpath:iomete/helpers/mcp/wait-query-finished.js')
+    * def rowsOf = function(q){ if (q.query_status == 'COMPLETED') return q.query_result.rows; var s = waitFinished(domain, q.query_id); if (s != 'COMPLETED') karate.fail('query ' + q.query_id + ' ended ' + s); return callTool('get_query_result', { domain: domain, query_id: q.query_id }).structuredContent.value.query_result.rows }
     * def rows = rowsOf(query)
     * match rows == '#[1]'
     * def row = rows[0]
@@ -63,7 +62,8 @@ Feature: MCP server - run_query steers agents past complex cells and failed EXPL
 
   Scenario: explain_query reports SQL that fails analysis as a failed query
     * def sqlCompute = karate.callSingle('classpath:iomete/tests/sql/setup/sql-compute.feature', { domain: domain })
-    # MCP submits through the v1 SQL API, which only reaches a compute on the local plane
+    # with sqlEditorV2 off MCP submits through the v1 SQL API, which only reaches a compute on the local plane;
+    # with it on the query goes to v2, which has not been run on a remote plane for this scenario
     * if (isRemotePlane(sqlCompute.computeDataPlane)) { karate.log('compute is on a remote plane, skipping'); karate.abort() }
     * def missingTable = 'spark_catalog.default.karate_missing_' + runId.replace(/[^A-Za-z0-9_]/g, '_')
     * def explainArgs = { domain: '#(domain)', compute_cluster: '#(sqlCompute.computeName)', sql: '#("SELECT * FROM " + missingTable)' }
@@ -73,6 +73,8 @@ Feature: MCP server - run_query steers agents past complex cells and failed EXPL
     * def explainSettled = function(){ var e; for (var i = 0; i < 3; i++) { e = callTool('explain_query', explainArgs, true); if (!stillRunning(e)) return e } return e }
     * def explain = explainSettled()
     * if (stillRunning(explain)) karate.fail('explain_query plan not ready after 3 tries (query ' + explain.structuredContent.query_id + '), so whether it reports the failed EXPLAIN was not checked')
+    # says what came back instead: a plan for SQL that cannot be analyzed is the fault this scenario is here for
+    * if (!explain.result.isError) karate.fail('explain_query answered without an error for SQL that fails analysis: ' + redact(JSON.stringify(explain.structuredContent)).substring(0, 3000))
     * match explain.result.isError == true
     * match explain.structuredContent contains { code: 'error.query_failed', message: '#string' }
     * match explain.structuredContent.details.reason == 'explain_plan_error'

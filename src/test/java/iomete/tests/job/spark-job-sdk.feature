@@ -63,11 +63,13 @@ Feature: SDK jobs, a job managed the way a customer's script does it
     When method post
     Then status 200
     * def cancelledId = response.id
-    * def driverPod = 'job-' + cancelledId + '-driver'
+    # the driver pod is job-{runId}-driver on current platforms and {runId}-driver on older ones,
+    # both ending in {runId}-driver (as compute-runtime.feature matches its driver)
+    * def isDriver = function(p){ return p.name.endsWith(cancelledId + '-driver') }
 
     * configure retry = { count: 60, interval: 10000 }
     Given path podsPath, cancelledId, 'instances'
-    And retry until responseStatus == 200 && response.find(p => p.name == driverPod && p.status == 'Running') != null
+    And retry until responseStatus == 200 && response.find(p => isDriver(p) && p.status == 'Running') != null
     When method get
     Then status 200
 
@@ -78,6 +80,6 @@ Feature: SDK jobs, a job managed the way a customer's script does it
     * configure retry = { count: 24, interval: 5000 }
     Given path podsPath, cancelledId, 'instances'
     # the platform keeps listing a killed driver, so what has to change is its state
-    And retry until responseStatus == 404 || (responseStatus == 200 && (response.find(p => p.name == driverPod) || {}).status != 'Running')
+    And retry until responseStatus == 404 || (responseStatus == 200 && (response.find(isDriver) || {}).status != 'Running')
     When method get
-    * karate.log('driver after cancel:', responseStatus, responseStatus == 200 ? response.find(p => p.name == driverPod) : response)
+    * karate.log('driver after cancel:', responseStatus, responseStatus == 200 ? response.find(isDriver) : response)
