@@ -27,8 +27,15 @@ Feature: Delete the domain this run created, and say what stays behind.
     And path 'api/v1/admin/domains'
     When method get
     Then status 200
-    * def extra = response.filter(d => d.id.startsWith('karate-rv-' + runId + '-') || d.id.startsWith('karate-ns-' + runId + '-'))
+    * def listed = response
+    * def extra = listed.filter(d => d.id.startsWith('karate-rv-' + runId + '-') || d.id.startsWith('karate-ns-' + runId + '-'))
     * karate.forEach(extra, d => deleteDomain(d.id))
+
+    # the private domains a scenario makes (karate-priv-<run id>-*): no admin can list or delete
+    # their catalogs, so these go through their owner
+    * def deletePrivateDomain = function(id){ var r = karate.call('classpath:iomete/helpers/domain/delete-private-domain.feature', { domain: id }); r.removed.forEach(x => removed.push(x)); r.failed.forEach(x => failed.push(x)) }
+    * def leftPrivate = listed.filter(d => d.id.startsWith('karate-priv-' + runId + '-'))
+    * karate.forEach(leftPrivate, d => deletePrivateDomain(d.id))
 
     # straight to stdout: `print` only reaches the HTML report
     * eval java.lang.System.out.println('run ' + runId + ': removed ' + removed.length + ' item(s)' + (removed.length ? ': ' + removed.join(', ') : ''))
