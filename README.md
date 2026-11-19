@@ -128,6 +128,20 @@ These tests skip unless you give them what they need in `.env` (or with `-e` for
 
 If a run was cancelled, `make cleanup` still removes what it left, as long as you run it from the same folder before starting another run. A Docker run cleans up when you press Ctrl-C or stop it. Give it time: `docker stop -t 300 <container>`, since plain `docker stop` kills it after 10 seconds, mid-cleanup. If the container was killed, run the image again with `-e IOMETE_RUN_ID=<the run id it printed>` and the argument `cleanup`.
 
+## Running from GitLab CI
+
+`.gitlab-ci.yml` runs the suite from a GitLab project, then removes what it created, whether the tests passed or failed. It points at no install of its own:
+
+1. Mirror or copy this repository into a GitLab project.
+2. Under **Settings > CI/CD > Variables**, add `IOMETE_BASE_URL`, and `IOMETE_ADMIN_PASSWORD` (or `IOMETE_TOKEN`) marked **Masked**. A **Protected** variable reaches only protected branches and tags.
+3. Start it from **Build > Pipelines > Run pipeline**, or on a schedule.
+
+It runs only when started by hand, on a schedule or through the API, and only when `IOMETE_BASE_URL` is set. A push never starts it.
+
+Every setting in [Settings](#settings) and [Optional tests](#optional-tests) works as a CI/CD variable. The ones the pipeline file lists are defaults, and a project, group, schedule or **Run pipeline** variable of the same name overrides them. So one project can test several installs, with one schedule each and its own `IOMETE_BASE_URL` and credentials. `KARATE_OPTIONS` runs part of the suite, for example `--tags @spark3`. `JAVA_IMAGE` sets the image the jobs run in, if your runners cannot pull `eclipse-temurin:21-jdk`.
+
+The report is kept as a job artifact, and the test results show on the pipeline's **Tests** tab. A cancelled pipeline skips the cleanup job, so retry that job to remove what the run left.
+
 ## Settings
 
 All settings go in `.env`, or `-e` for Docker. Only the first two are required.
