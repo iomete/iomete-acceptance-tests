@@ -6,9 +6,10 @@ Feature: Spark History — a completed job run is served by the history server
 
   The platform links a run to its history entry through sparkHistoryUrl, rendered as
   spark-history/history/{sparkApplicationId}. Note the assertions go through that per
-  application path, not the application listing: the deployed history server rescans its
-  log directory only at startup, so a new run reaches the UI through getAppUI probing the
-  log directory on demand, and never appears in /api/v1/applications.
+  application path, not the application listing: a new run reaches the UI through getAppUI
+  probing the log directory on demand. If that read happens before the event log is fully
+  written, the run stays partial until the next rescan (spark.history.fs.update.interval,
+  120s on dev, peers and release), so the history wait below outlasts one rescan.
 
   Background:
     * url baseUrl
@@ -50,8 +51,9 @@ Feature: Spark History — a completed job run is served by the history server
     # a hardcoded local path asks the control plane for an event log it does not have.
     * def apiBase = historyUrl.replace('/history/' + sparkAppId, '/api/v1/applications/' + sparkAppId)
 
-    # the history server rebuilds this run's UI from the event log it just wrote
-    * configure retry = { count: 12, interval: 10000 }
+    # the history server rebuilds this run's UI from the event log it just wrote; a partial
+    # read is only replaced on the next rescan (120s), so wait ~200s
+    * configure retry = { count: 20, interval: 10000 }
     Given url baseUrl + '/' + apiBase + '/jobs'
     And retry until responseStatus == 200 && response.length > 0
     When method get
