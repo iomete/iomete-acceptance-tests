@@ -94,7 +94,7 @@ make test-one FEATURE=custom-tests
 
 With Docker, mount the folder into the container: add `-v "$PWD/custom-tests:/suite/custom-tests"` to the `docker run` command.
 
-Each feature needs a `@lock` tag on its first line, which decides what it may run next to. Use `@lock=api` for a test that only calls the API. `custom-tests/example.feature` shows the shape. A test can use the same settings and helpers as the IOMETE tests, for example `baseUrl` and `runId`, and `call read('classpath:iomete/helpers/...')`. Follow the test-writing rules in [CONTRIBUTING.md](CONTRIBUTING.md) so your test cleans up after itself.
+Each feature needs a `@lock` tag on its first line, which decides what it may run next to. Use `@lock=api` for a test that only calls the API. `custom-tests/example.feature` shows the shape. A test can use the same settings and helpers as the IOMETE tests, for example `baseUrl` and `runId`, and `call read('classpath:iomete/helpers/...')`. Follow the test-writing rules in [CONTRIBUTING.md](CONTRIBUTING.md) so your test cleans up after itself. [WRITING-TESTS.md](WRITING-TESTS.md) walks through writing one, with examples, and [SCENARIOS.md](SCENARIOS.md) lists what the IOMETE tests already cover.
 
 ## Optional tests
 
